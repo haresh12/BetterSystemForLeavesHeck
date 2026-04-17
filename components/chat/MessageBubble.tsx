@@ -226,7 +226,10 @@ export function MessageBubble({ message, isStreaming, onSend, suppressCards }: M
       // Strip DOC_VERIFIED blobs from display
       const t = p.text as string
       const idx = t.lastIndexOf('\n\n[DOC_VERIFIED:')
-      return (idx !== -1 ? t.slice(0, idx) : t).replace(/\[IMAGE_STRIPPED\]/g, '').trim()
+      let cleaned = (idx !== -1 ? t.slice(0, idx) : t).replace(/\[IMAGE_STRIPPED\]/g, '')
+      // Strip [Context: ...] prefix from display
+      cleaned = cleaned.replace(/^\[Context:.*?\]\s*/i, '')
+      return cleaned.trim()
     })
     .filter(Boolean)
     .join('')

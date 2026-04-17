@@ -26,22 +26,24 @@ function leanCase(d: FirebaseFirestore.DocumentData, id: string): LeanCase {
 
 export const casesMcpTools = {
   list_cases: tool({
-    description: 'Query and filter cases for admin. Supports natural language filter parameters including status, leave type, department, tenure, doc status, date range, and priority. Returns CaseTable component.',
+    description: 'Query and filter cases for admin. Supports natural language filter parameters. ALWAYS provide a short, human-readable tabName that describes this filter (e.g. "Personal Cases", "Urgent Tomorrow", "FMLA Missing Docs", "Engineering High Priority", "Sarah Chen Cases").',
     inputSchema: z.object({
       adminId: z.string(),
+      tabName: z.string().describe('Short human-readable name for this filter view. Examples: "Personal Cases", "Starting Tomorrow", "FMLA Missing Docs", "Engineering Team", "High Priority Urgent". Be descriptive and concise.'),
       status: z.enum(['all', 'open', 'pending_docs', 'approved', 'rejected', 'cancelled', 'under_review']).optional().default('all'),
       leaveType: z.enum(['all', 'PTO', 'Sick', 'FMLA', 'Maternity', 'Paternity', 'Bereavement', 'Personal', 'Intermittent', 'Unpaid', 'CompOff', 'EmergencyLeave']).optional().default('all'),
       docStatus: z.enum(['all', 'uploaded', 'missing', 'not_required', 'invalid']).optional().default('all'),
       priority: z.enum(['all', 'critical', 'high', 'medium', 'low']).optional().default('all'),
       department: z.string().optional(),
       minTenureYears: z.number().optional().describe('Minimum employee tenure in years'),
-      startDateFrom: z.string().optional().describe('ISO date — filter cases starting from this date'),
-      startDateTo: z.string().optional().describe('ISO date — filter cases up to this date'),
+      startDateFrom: z.string().optional().describe('ISO date — filter cases where LEAVE starts from this date'),
+      startDateTo: z.string().optional().describe('ISO date — filter cases where LEAVE starts up to this date'),
+      updatedAfter: z.string().optional().describe('ISO date — filter cases updated/actioned AFTER this date. Use for "rejected today", "approved this week", etc.'),
       employeeName: z.string().optional().describe('Partial employee name search'),
       sortBy: z.enum(['createdAt', 'startDate', 'priority']).optional().default('createdAt'),
       limit: z.number().optional().default(50),
     }),
-    execute: async ({ adminId, status, leaveType, docStatus, priority, department, minTenureYears, startDateFrom, startDateTo, employeeName, sortBy, limit }) => {
+    execute: async ({ adminId, tabName, status, leaveType, docStatus, priority, department, minTenureYears, startDateFrom, startDateTo, updatedAfter, employeeName, sortBy, limit }) => {
       const db = getAdminDb()
 
       const adminSnap = await db.collection('users').doc(adminId).get()
@@ -68,6 +70,7 @@ export const casesMcpTools = {
       if (employeeName) cases = cases.filter((c) => c.employeeName.toLowerCase().includes(employeeName.toLowerCase()))
       if (startDateFrom) cases = cases.filter((c) => c.startDate >= startDateFrom!)
       if (startDateTo) cases = cases.filter((c) => c.startDate <= startDateTo!)
+      if (updatedAfter) cases = cases.filter((c) => toISO(c.updatedAt) >= updatedAfter!)
 
       if (minTenureYears !== undefined) {
         const employeeIds = [...new Set(cases.map((c) => c.employeeId))]
@@ -86,11 +89,14 @@ export const casesMcpTools = {
         cases.sort((a, b) => (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3))
       }
 
+      const resultCount = cases.length
       return {
         ui_component: 'CaseTable',
         cases: cases.slice(0, limit),
-        total: cases.length,
-        filters: { status, leaveType, docStatus, priority, department, startDateFrom, startDateTo, employeeName },
+        total: resultCount,
+        tabName,
+        filters: { status, leaveType, docStatus, priority, department, startDateFrom, startDateTo, updatedAfter, employeeName },
+        exactMessage: `${tabName} tab created — ${resultCount} case${resultCount !== 1 ? 's' : ''}.`,
       }
     },
   }),
@@ -166,11 +172,10 @@ export const casesMcpTools = {
       })
 
       return {
-        ui_component: 'CaseCard',
         success: true,
         caseId,
         status: 'approved',
-        message: `Case #${caseId.slice(-6).toUpperCase()} approved. Employee notified.`,
+        exactMessage: `Case #${caseId.slice(-6).toUpperCase()} approved. Employee notified.`,
       }
     },
   }),
@@ -239,13 +244,63 @@ export const casesMcpTools = {
         success: true,
         approved,
         total: caseIds.length,
-        message: `${approved} case${approved !== 1 ? 's' : ''} approved successfully. All employees notified.`,
+        exactMessage: `${approved} case${approved !== 1 ? 's' : ''} approved. All employees notified.`,
+      }
+    },
+  }),
+
+  bulk_reject: tool({
+    description: 'Reject multiple cases at once with reasons. Use when admin says "reject all flagged", "reject these 5 cases". Each case gets its own reason.',
+    inputSchema: z.object({
+      adminId: z.string(),
+      cases: z.array(z.object({
+        caseId: z.string(),
+        reason: z.string(),
+      })).describe('Array of {caseId, reason} pairs'),
+    }),
+    execute: async ({ adminId, cases: casesToReject }) => {
+      const db = getAdminDb()
+      const adminSnap = await db.collection('users').doc(adminId).get()
+      const adminName = adminSnap.exists ? adminSnap.data()!.name : 'Admin'
+      const now = FieldValue.serverTimestamp()
+      const results: string[] = []
+
+      for (const { caseId, reason } of casesToReject) {
+        const caseRef = db.collection('cases').doc(caseId)
+        const caseSnap = await caseRef.get()
+        if (!caseSnap.exists) { results.push(`${caseId}: not found`); continue }
+        const c = caseSnap.data() as CaseDoc
+
+        await caseRef.update({
+          status: 'rejected', rejectionReason: reason, updatedAt: now,
+          notes: [...(c.notes ?? []), { text: `Rejected: ${reason}`, actorId: adminId, actorName: adminName, actorRole: 'admin', timestamp: new Date().toISOString() }],
+        })
+
+        // Restore balance
+        const balanceKeyMap: Record<string, string> = { PTO: 'pto', Sick: 'sick', Personal: 'personal', Bereavement: 'bereavement', Maternity: 'maternity', Paternity: 'paternity', FMLA: 'fmla', Intermittent: 'fmla', CompOff: 'pto', EmergencyLeave: 'sick' }
+        const key = balanceKeyMap[c.leaveType]
+        if (key && c.leaveType !== 'Unpaid') {
+          const userSnap = await db.collection('users').doc(c.employeeId).get()
+          if (userSnap.exists) {
+            await db.collection('users').doc(c.employeeId).update({ [`balances.${key}`]: (userSnap.data()!.balances?.[key] ?? 0) + c.days })
+          }
+        }
+
+        await db.collection('notifications').add({ targetUserId: c.employeeId, type: 'case_rejected', caseId, message: `Your ${c.leaveType} leave was rejected. Reason: ${reason}`, read: false, dismissed: false, createdAt: now })
+        results.push(`${c.employeeName}: rejected`)
+      }
+
+      return {
+        success: true,
+        rejected: results.length,
+        total: casesToReject.length,
+        exactMessage: `${results.length} case${results.length !== 1 ? 's' : ''} rejected. Balances restored, employees notified.`,
       }
     },
   }),
 
   reject_case: tool({
-    description: 'Reject a leave case. Reason is mandatory. Restores employee balance.',
+    description: 'Reject a single leave case. Reason is mandatory. Restores employee balance. For multiple rejections use bulk_reject instead.',
     inputSchema: z.object({
       caseId: z.string(),
       adminId: z.string(),
@@ -311,11 +366,10 @@ export const casesMcpTools = {
       })
 
       return {
-        ui_component: 'CaseCard',
         success: true,
         caseId,
         status: 'rejected',
-        message: `Case #${caseId.slice(-6).toUpperCase()} rejected. Employee balance restored and notified.`,
+        exactMessage: `Case #${caseId.slice(-6).toUpperCase()} rejected. Balance restored, employee notified.`,
       }
     },
   }),
@@ -526,6 +580,24 @@ export const casesMcpTools = {
         message: results.length === 0
           ? `No employees found matching "${query}".`
           : `Found ${results.length} employee${results.length !== 1 ? 's' : ''} matching "${query}".`,
+      }
+    },
+  }),
+
+  trigger_review: tool({
+    description: 'Open the AI Review Dialog on the admin dashboard to review cases with two AI agents. Call this when admin says "review", "analyze", "check these cases", "review first N", "review [type] cases". The dashboard will open a full-screen review panel showing Agent 1 (Reviewer) and Agent 2 (Validator) analyzing each case.',
+    inputSchema: z.object({
+      adminId: z.string(),
+      caseIds: z.array(z.string()).describe('Array of case IDs to review. If admin says "first 5", pass only 5.'),
+      tabName: z.string().describe('Human-readable name for this review session, e.g. "Personal Cases", "First 10 PTO", "Engineering Urgent"'),
+    }),
+    execute: async ({ adminId, caseIds, tabName }) => {
+      return {
+        ui_component: 'ReviewTrigger',
+        caseIds,
+        tabName,
+        total: caseIds.length,
+        message: `Opening AI Review for ${caseIds.length} cases — "${tabName}"`,
       }
     },
   }),

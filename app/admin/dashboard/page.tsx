@@ -14,6 +14,7 @@ import { CaseTableAdmin } from '@/components/admin/CaseTableAdmin'
 import { CaseSlideOver } from '@/components/admin/CaseSlideOver'
 import { DynamicTabs, type DynamicTab } from '@/components/admin/DynamicTabs'
 import { QuickFilters } from '@/components/admin/QuickFilters'
+import { AIReviewDialog } from '@/components/admin/AIReviewDialog'
 import {
   Shield, LogOut, Plus, Users, RefreshCw, Sparkles,
   UserPlus, UserMinus, Search, X,
@@ -57,6 +58,11 @@ export default function AdminDashboardPage() {
   ])
   const [activeTabId, setActiveTabId] = useState('all')
 
+  // AI Review Dialog
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+  const [reviewCaseIds, setReviewCaseIds] = useState<string[]>([])
+  const [reviewTabName, setReviewTabName] = useState('')
+
   // AI verdicts per case
   const [aiVerdicts, setAiVerdicts] = useState<Record<string, 'safe' | 'review' | 'flag'>>({})
   const [reviewingCaseIds, setReviewingCaseIds] = useState<Set<string>>(new Set())
@@ -87,8 +93,10 @@ export default function AdminDashboardPage() {
   // Real-time Firestore
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'cases'), (snap) => {
+      const seen = new Set<string>()
       const cases = snap.docs
         .map(d => ({ caseId: d.id, ...d.data() } as CaseDoc & { caseId: string }))
+        .filter(c => { if (seen.has(c.caseId)) return false; seen.add(c.caseId); return true })
         .sort((a, b) => toISO(b.createdAt).localeCompare(toISO(a.createdAt)))
       setAllCases(cases)
       setCasesLoading(false)
@@ -98,67 +106,67 @@ export default function AdminDashboardPage() {
   }, [])
 
   // Watch for AI tool outputs → create dynamic tabs
+  const processedToolCallIds = useRef<Set<string>>(new Set())
   useEffect(() => {
-    console.log('[TAB] Messages changed, count:', messages.length)
     if (messages.length === 0) return
-    const lastMsg = messages[messages.length - 1]
-    console.log('[TAB] Last message role:', lastMsg.role, 'parts count:', (lastMsg.parts ?? []).length)
-    if (lastMsg.role !== 'assistant') return
+    for (const msg of messages) {
+      if (msg.role !== 'assistant') continue
+      for (const part of (msg.parts ?? [])) {
+        const p = part as any
+        if (!p.type || !p.toolCallId) continue
+        if (processedToolCallIds.current.has(p.toolCallId)) continue
+        const isToolPart = p.type === 'dynamic-tool' || (typeof p.type === 'string' && p.type.startsWith('tool-'))
+        if (!isToolPart) continue
+        if (p.state !== 'output-available' || !p.output) continue
+        processedToolCallIds.current.add(p.toolCallId)
+        const uiType = p.output.ui_component
 
-    for (const part of (lastMsg.parts ?? [])) {
-      const p = part as any
-      console.log('[TAB] Part type:', p.type, 'state:', p.state, 'hasOutput:', !!p.output)
-      if (!p.type) continue
-      const isToolPart = p.type === 'dynamic-tool' || (typeof p.type === 'string' && p.type.startsWith('tool-'))
-      console.log('[TAB] isToolPart:', isToolPart, 'type:', p.type)
-      if (!isToolPart) continue
-      if (p.state !== 'output-available' || !p.output) { console.log('[TAB] Skipped: state=', p.state, 'output=', !!p.output); continue }
+        // Handle ReviewTrigger → open dialog
+        if (uiType === 'ReviewTrigger') {
+          const ids = (p.output.caseIds as string[]) ?? []
+          const name = (p.output.tabName as string) ?? 'Review'
+          console.log('[REVIEW] Trigger detected:', name, 'cases:', ids.length)
+          if (ids.length > 0) {
+            setReviewCaseIds(ids)
+            setReviewTabName(name)
+            setReviewDialogOpen(true)
+          }
+          continue
+        }
 
-      console.log('[TAB] ✅ Tool output found! ui_component:', p.output.ui_component, 'cases:', (p.output.cases as any[])?.length, 'filters:', JSON.stringify(p.output.filters))
-
-      if (p.output.ui_component === 'CaseTable') {
+        if (uiType !== 'CaseTable') continue
         const cases = (p.output.cases as any[]) ?? []
         if (cases.length === 0) continue
+
         const caseIds = cases.map((c: any) => c.caseId)
         const filters = p.output.filters ?? {}
-
-        let tabLabel = 'Filtered'
-        let tabColor = '#6366f1'
         const lt = filters.leaveType
         const ds = filters.docStatus
         const pr = filters.priority
         const dp = filters.department
-        const en = filters.employeeName
-        const sdf = filters.startDateFrom
-        const sdt = filters.startDateTo
 
-        if (lt && lt !== 'all') { tabLabel = lt; tabColor = TYPE_COLORS[lt] ?? '#6366f1' }
-        else if (ds === 'missing') { tabLabel = 'Missing Docs'; tabColor = '#f59e0b' }
-        else if (pr === 'high') { tabLabel = 'High Priority'; tabColor = '#ef4444' }
-        else if (sdf || sdt) {
-          const tmrw = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-          tabLabel = (sdf === tmrw || sdt === tmrw) ? 'Starting Tomorrow' : `${sdf ?? ''} → ${sdt ?? ''}`
-          tabColor = '#ef4444'
-        }
-        else if (en) { tabLabel = en; tabColor = '#8b5cf6' }
-        else if (dp) { tabLabel = dp; tabColor = '#8b5cf6' }
-        else if (p.output.viewLabel) { tabLabel = p.output.viewLabel }
+        // Tab name: AI provides it, or we derive from filters
+        let tabLabel = (p.output.tabName as string) || 'Filtered'
+        let tabColor = '#6366f1'
+        if (lt && lt !== 'all') tabColor = TYPE_COLORS[lt] ?? '#6366f1'
+        else if (ds === 'missing') tabColor = '#f59e0b'
+        else if (pr === 'high') tabColor = '#ef4444'
+        else if (dp) tabColor = '#8b5cf6'
 
-        console.log('[TAB] Tab label:', tabLabel, 'color:', tabColor, 'caseIds:', caseIds.length)
+        console.log('[TAB] Creating:', tabLabel, 'cases:', caseIds.length)
         const existing = tabs.find(t => t.label === tabLabel && t.id !== 'all')
         if (existing) {
-          console.log('[TAB] Updating existing tab:', existing.id)
           setTabs(prev => prev.map(t => t.id === existing.id ? { ...t, caseIds } : t))
           setActiveTabId(existing.id)
         } else {
           const newTab: DynamicTab = { id: `ai-${Date.now()}`, label: tabLabel, caseIds, color: tabColor, createdByAI: true }
-          console.log('[TAB] ✅ NEW TAB:', newTab.label, 'cases:', newTab.caseIds.length)
           setTabs(prev => [...prev, newTab])
           setActiveTabId(newTab.id)
+          toast.success(`✨ ${tabLabel} — ${caseIds.length} cases`, { duration: 3000 })
         }
       }
     }
-  }, [messages])
+  }, [messages, status])
 
   // Parse AI review text for verdicts (✅/⚠️/❌ patterns)
   useEffect(() => {
@@ -213,7 +221,10 @@ export default function AdminDashboardPage() {
 
   // ── Actions (all go through chat → AI → MCP) ──
   function sendChatMessage(msg: string) {
-    sendMessage({ text: msg })
+    // Add active tab context so AI knows what we're talking about
+    const tab = tabs.find(t => t.id === activeTabId)
+    const context = tab && tab.id !== 'all' ? `[Context: viewing "${tab.label}" tab with ${tab.caseIds.length} cases] ` : ''
+    sendMessage({ text: context + msg })
   }
 
   function handleSend(e: React.FormEvent) {
@@ -233,10 +244,11 @@ export default function AdminDashboardPage() {
 
   function handleAIReview(tabId: string) {
     const tab = tabs.find(t => t.id === tabId)
-    if (!tab) return
-    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, reviewing: true } : t))
-    setReviewingCaseIds(new Set(tab.caseIds))
-    sendChatMessage(`Review all ${tab.caseIds.length} cases in the "${tab.label}" tab. Go through each case one by one with your verdict.`)
+    if (!tab || tab.caseIds.length === 0) return
+    setReviewCaseIds(tab.caseIds)
+    setReviewTabName(tab.label)
+    setReviewDialogOpen(true)
+    sendChatMessage(`Reviewing ${tab.caseIds.length} cases from "${tab.label}" tab. Results shown in the review panel.`)
   }
 
   function handleApproveAllSafe(tabId: string) {
@@ -246,6 +258,7 @@ export default function AdminDashboardPage() {
     if (safeCaseIds.length === 0) return
     sendChatMessage(`Approve these ${safeCaseIds.length} safe cases: ${safeCaseIds.join(', ')}`)
   }
+
 
   function handleFilterByType(msg: string) {
     sendChatMessage(msg)
@@ -258,16 +271,29 @@ export default function AdminDashboardPage() {
     setReviewingCaseIds(new Set())
   }
 
+  const hasMockCases = allCases.some(c => (c as any).isMockData)
+
   async function handleResetDemo() {
     setResetting(true)
     try {
       await fetch('/api/admin/reset-mock', { method: 'POST', credentials: 'include' })
-      toast.success('Mock data cleared. Run seed to re-populate.')
+      toast.success('Mock data cleared.')
       handleNewChat()
       setTabs([{ id: 'all', label: 'All Cases', caseIds: [], color: '#6366f1', createdByAI: false, pinned: true }])
       setActiveTabId('all')
       setAiVerdicts({})
     } catch { toast.error('Reset failed') }
+    setResetting(false)
+  }
+
+  async function handleSeedDemo() {
+    setResetting(true)
+    try {
+      const res = await fetch('/api/admin/seed-mock', { method: 'POST', credentials: 'include' })
+      const data = await res.json()
+      if (res.ok) toast.success('Demo cases loaded!')
+      else toast.error(data.error ?? 'Seed failed')
+    } catch { toast.error('Seed failed') }
     setResetting(false)
   }
 
@@ -321,9 +347,15 @@ export default function AdminDashboardPage() {
             <button onClick={() => { setEmpPanelOpen(true); loadEmployees() }} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe', cursor: 'pointer' }}>
               <Users className="h-3 w-3" /> Team
             </button>
-            <button onClick={handleResetDemo} disabled={resetting} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
-              <RefreshCw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} /> Reset
-            </button>
+            {hasMockCases ? (
+              <button onClick={handleResetDemo} disabled={resetting} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
+                <RefreshCw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} /> {resetting ? 'Resetting...' : 'Reset Demo'}
+              </button>
+            ) : (
+              <button onClick={handleSeedDemo} disabled={resetting} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', border: '1px solid #86efac', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
+                <Plus className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} /> {resetting ? 'Loading...' : 'Load Demo Cases'}
+              </button>
+            )}
             <NotificationBell notifications={notifList} unreadCount={unreadCount} onMarkAllRead={markAllRead} />
             <button onClick={handleSignOut} style={{ height: 30, width: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>
               <LogOut className="h-3.5 w-3.5" />
@@ -402,7 +434,7 @@ export default function AdminDashboardPage() {
                   message={msg}
                   isStreaming={isLoading && i === visibleMessages.length - 1 && msg.role === 'assistant'}
                   onSend={(text) => sendChatMessage(text)}
-                  suppressCards={['CaseTable', 'ProactiveAlertCard', 'TrendCard']}
+                  suppressCards={['CaseTable', 'ProactiveAlertCard', 'TrendCard', 'ReviewTrigger', 'CaseCard', 'CaseStatusCard', 'ConfirmCard']}
                 />
               ))}
               <AnimatePresence>
@@ -441,6 +473,19 @@ export default function AdminDashboardPage() {
       <AnimatePresence>
         {selectedCase && (
           <CaseSlideOver caseData={selectedCase} onClose={() => setSelectedCase(null)} onApprove={(id) => handleApproveViaChat(id)} onReject={(id, reason) => handleRejectViaChat(id, reason)} />
+        )}
+      </AnimatePresence>
+
+      {/* AI Review Dialog */}
+      <AnimatePresence>
+        {reviewDialogOpen && (
+          <AIReviewDialog
+            open={reviewDialogOpen}
+            onClose={() => setReviewDialogOpen(false)}
+            caseIds={reviewCaseIds}
+            tabName={reviewTabName}
+            onAction={sendChatMessage}
+          />
         )}
       </AnimatePresence>
 

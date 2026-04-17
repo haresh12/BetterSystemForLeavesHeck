@@ -12,7 +12,7 @@ import { intelligenceMcpTools } from '@/lib/mcp/intelligence-mcp'
 import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 120
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       ...analyticsMcpTools,
       ...intelligenceMcpTools,
     },
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(50),
   })
 
   return result.toUIMessageStreamResponse()

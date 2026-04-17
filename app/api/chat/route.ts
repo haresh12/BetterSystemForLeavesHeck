@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       get_unread_notifications: notificationMcpTools.get_unread_notifications,
       mark_read: notificationMcpTools.mark_read,
     },
-    stopWhen: stepCountIs(8),
+    stopWhen: stepCountIs(20),
   })
 
   return result.toUIMessageStreamResponse()

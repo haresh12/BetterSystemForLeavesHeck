@@ -183,9 +183,9 @@ export const notificationMcpTools = {
           totalManagedCases: cases.length,
           criticalAlerts: alerts.filter((a) => a.severity === 'critical').length,
         },
-        message: alerts.length === 0
-          ? `${cases.length} managed cases — no critical alerts today.`
-          : `${alerts.length} alert${alerts.length !== 1 ? 's' : ''} require your attention.`,
+        exactMessage: alerts.length === 0
+          ? `${cases.length} managed cases, ${openCount} open, ${pendingDocsCount} pending docs — no critical alerts today.`
+          : `${cases.length} managed cases. ${alerts.length} alert${alerts.length !== 1 ? 's' : ''}: ${alerts.filter(a => a.severity === 'critical').length} critical, ${alerts.filter(a => a.severity === 'high').length} high. ${openCount} open, ${pendingDocsCount} pending docs.`,
       }
     },
   }),
