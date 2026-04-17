@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
+import { DefaultChatTransport, type UIMessage } from 'ai'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/AuthContext'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -96,6 +96,182 @@ function useTypewriter(texts: string[], typingSpeed = 45, pauseMs = 2000) {
   return display
 }
 
+function extractPlainText(message: UIMessage): string {
+  return (message.parts ?? [])
+    .filter((part): part is Extract<UIMessage['parts'][number], { type: 'text' }> => (
+      part.type === 'text' && typeof part.text === 'string'
+    ))
+    .map((part) => {
+      const idx = part.text.lastIndexOf('\n\n[DOC_VERIFIED:')
+      return (idx !== -1 ? part.text.slice(0, idx) : part.text).trim()
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+function extractCardOutputs(message: UIMessage): Array<Record<string, unknown>> {
+  return (message.parts ?? [])
+    .filter((part): part is any => {
+      const p = part as any
+      return typeof p?.type === 'string' &&
+        (p.type === 'dynamic-tool' || p.type.startsWith('tool-')) &&
+        p.state === 'output-available' &&
+        p.output != null &&
+        typeof p.output === 'object' &&
+        'ui_component' in p.output
+    })
+    .map((part) => (part as any).output as Record<string, unknown>)
+}
+
+type StoredDisplayMessage = {
+  role: UIMessage['role']
+  text: string
+  cards: Array<Record<string, unknown>>
+}
+
+type StoredChatHistory = {
+  version: 2
+  messages: StoredDisplayMessage[]
+}
+
+function toStoredHistory(messages: UIMessage[], maxStored: number): StoredChatHistory {
+  const storedMessages = messages
+    .slice(-maxStored)
+    .map((message) => {
+      const text = extractPlainText(message)
+      const cards = extractCardOutputs(message)
+      if (!text && cards.length === 0) return null
+
+      return {
+        role: message.role,
+        text,
+        cards,
+      } satisfies StoredDisplayMessage
+    })
+    .filter((message): message is StoredDisplayMessage => message !== null)
+
+  return {
+    version: 2,
+    messages: storedMessages,
+  }
+}
+
+function mergeStoredCards(
+  nextMessages: StoredDisplayMessage[],
+  previousMessages: StoredDisplayMessage[],
+): StoredDisplayMessage[] {
+  return nextMessages.map((message, index) => {
+    if (message.cards.length > 0) return message
+
+    const previous = previousMessages[index]
+    if (!previous) return message
+    if (previous.role !== message.role || previous.text !== message.text || previous.cards.length === 0) {
+      return message
+    }
+
+    return {
+      ...message,
+      cards: previous.cards,
+    }
+  })
+}
+
+function toSafeMessages(messages: StoredDisplayMessage[]): UIMessage[] {
+  return messages.flatMap((message) => {
+    if (!message.text) return []
+
+    return [{
+      id: crypto.randomUUID(),
+      role: message.role,
+      parts: [{ type: 'text', text: message.text }],
+    } satisfies UIMessage]
+  })
+}
+
+function fromStoredMessages(value: unknown): StoredDisplayMessage[] {
+  const rawMessages = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as StoredChatHistory).messages)
+      ? (value as StoredChatHistory).messages
+      : null
+
+  if (!rawMessages) return []
+
+  return rawMessages.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+
+    const maybeMessage = item as Partial<StoredDisplayMessage> & Partial<UIMessage> & { content?: unknown }
+    const role = maybeMessage.role
+    if (role !== 'user' && role !== 'assistant' && role !== 'system') return []
+
+    const text = typeof maybeMessage.text === 'string'
+      ? maybeMessage.text.trim()
+      : typeof maybeMessage.content === 'string'
+        ? maybeMessage.content.trim()
+        : Array.isArray(maybeMessage.parts)
+        ? maybeMessage.parts
+          .filter((part): part is Extract<UIMessage['parts'][number], { type: 'text' }> => (
+            part.type === 'text' && typeof part.text === 'string'
+          ))
+          .map((part) => part.text.trim())
+          .filter(Boolean)
+          .join('\n')
+        : ''
+
+    const cards = Array.isArray(maybeMessage.cards)
+      ? maybeMessage.cards.filter((card): card is Record<string, unknown> => (
+        !!card &&
+        typeof card === 'object' &&
+        'ui_component' in card
+      ))
+      : []
+
+    if (!text && cards.length === 0) return []
+
+    return [{
+      role,
+      text,
+      cards,
+    } satisfies StoredDisplayMessage]
+  })
+}
+
+function createDisplayMessages(messages: UIMessage[], storedMessages: StoredDisplayMessage[]): UIMessage[] {
+  return messages.map((message, index) => {
+    const stored = storedMessages[index]
+    const text = extractPlainText(message)
+    const liveCards = extractCardOutputs(message)
+
+    if (!stored || stored.role !== message.role || stored.text !== text || liveCards.length > 0 || stored.cards.length === 0) {
+      return message
+    }
+
+    return {
+      ...message,
+      parts: [
+        ...(message.parts ?? []),
+        ...stored.cards.map((card, cardIndex) => ({
+          type: 'dynamic-tool',
+          toolCallId: `restored-${index}-${cardIndex}`,
+          state: 'output-available',
+          output: card,
+        })),
+      ],
+    } as UIMessage
+  })
+}
+
+function getInitialStoredDisplayMessages(storageKey: string): StoredDisplayMessage[] {
+  if (typeof window === 'undefined') return []
+
+  try {
+    const saved = window.localStorage.getItem(storageKey)
+    return saved ? fromStoredMessages(JSON.parse(saved)) : []
+  } catch {
+    return []
+  }
+}
+
 export default function EmployeeChatPage() {
   const router = useRouter()
   const { profile, signOut } = useAuth()
@@ -108,6 +284,9 @@ export default function EmployeeChatPage() {
 
   const STORAGE_KEY = 'convowork_chat_history'
   const MAX_STORED = 15
+  const [storedDisplayMessages, setStoredDisplayMessages] = useState<StoredDisplayMessage[]>(
+    () => getInitialStoredDisplayMessages(STORAGE_KEY)
+  )
 
   const { messages, sendMessage, status, setMessages } = useChat({
     transport: employeeTransport,
@@ -124,15 +303,16 @@ export default function EmployeeChatPage() {
     if (restoredRef.current) return
     restoredRef.current = true
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed)
+      if (storedDisplayMessages.length > 0) {
+        const safeMessages = toSafeMessages(storedDisplayMessages)
+        if (safeMessages.length > 0) {
+          setMessages(safeMessages)
         }
+      } else {
+        localStorage.removeItem(STORAGE_KEY)
       }
     } catch { /* ignore corrupt localStorage */ }
-  }, []) // eslint-disable-line
+  }, [setMessages, storedDisplayMessages, STORAGE_KEY])
 
   // Save to localStorage — only after streaming completes, debounced 500ms
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -141,15 +321,27 @@ export default function EmployeeChatPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_STORED)))
+        const safeHistory = toStoredHistory(messages, MAX_STORED)
+        const mergedMessages = mergeStoredCards(safeHistory.messages, storedDisplayMessages)
+        if (safeHistory.messages.length > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            ...safeHistory,
+            messages: mergedMessages,
+          }))
+          setStoredDisplayMessages(mergedMessages)
+        } else {
+          localStorage.removeItem(STORAGE_KEY)
+          setStoredDisplayMessages([])
+        }
       } catch { /* storage full */ }
     }, 500)
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [messages, isLoading])
+  }, [messages, isLoading, storedDisplayMessages])
 
   function handleNewChat() {
     setMessages([])
     localStorage.removeItem(STORAGE_KEY)
+    setStoredDisplayMessages([])
     setInput('')
     setPendingFile(null)
   }
@@ -208,6 +400,7 @@ export default function EmployeeChatPage() {
   const firstName = profile?.name?.split(' ')[0] ?? 'there'
   const initials = profile?.name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() ?? 'U'
   const g = profile?.name ? getGreeting(profile.name) : { time: 'Hey', name: firstName }
+  const displayMessages = createDisplayMessages(messages, storedDisplayMessages)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -634,9 +827,9 @@ export default function EmployeeChatPage() {
             </AnimatePresence>
 
             {/* ─── MESSAGES ─── */}
-            {messages.length > 0 && (
+            {displayMessages.length > 0 && (
               <div className="py-6 space-y-0.5">
-                {messages.map((message, i) => (
+                {displayMessages.map((message, i) => (
                   <MessageBubble
                     key={message.id}
                     message={message}
