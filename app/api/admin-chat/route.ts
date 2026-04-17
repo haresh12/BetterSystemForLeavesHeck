@@ -8,6 +8,7 @@ import { documentMcpTools } from '@/lib/mcp/document-mcp'
 import { policyMcpTools } from '@/lib/mcp/policy-mcp'
 import { notificationMcpTools } from '@/lib/mcp/notification-mcp'
 import { analyticsMcpTools } from '@/lib/mcp/analytics-mcp'
+import { intelligenceMcpTools } from '@/lib/mcp/intelligence-mcp'
 import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       ...policyMcpTools,
       ...notificationMcpTools,
       ...analyticsMcpTools,
+      ...intelligenceMcpTools,
     },
     stopWhen: stepCountIs(10),
   })

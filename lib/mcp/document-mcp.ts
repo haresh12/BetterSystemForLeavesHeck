@@ -177,9 +177,43 @@ Output ONLY a JSON object with these exact fields:
         caseId,
         hasDocument: true,
         status: docData.status,
+        fileName: docData.fileName ?? null,
+        fileUrl: docData.fileUrl ?? null,
         extractedFields: docData.extractedFields,
         uploadedAt: docData.uploadedAt?.toDate?.()?.toISOString() ?? null,
       }
+    },
+  }),
+
+  list_case_documents: tool({
+    description: 'List all documents uploaded for a case. Admin use — shows all upload attempts, valid and invalid.',
+    inputSchema: z.object({
+      caseId: z.string(),
+    }),
+    execute: async ({ caseId }) => {
+      const db = getAdminDb()
+      const snap = await db.collection('documents').where('caseId', '==', caseId).get()
+
+      if (snap.empty) {
+        return { caseId, documents: [], total: 0, message: 'No documents uploaded for this case.' }
+      }
+
+      const docs = snap.docs.map((d) => {
+        const data = d.data()
+        return {
+          documentId: d.id,
+          fileName: data.fileName ?? 'unknown',
+          fileUrl: data.fileUrl ?? null,
+          status: data.status,
+          confidenceScore: data.extractedFields?.confidenceScore ?? null,
+          doctorName: data.extractedFields?.doctorName ?? null,
+          hospital: data.extractedFields?.hospital ?? null,
+          isValid: data.extractedFields?.isValid ?? false,
+          uploadedAt: data.uploadedAt?.toDate?.()?.toISOString() ?? null,
+        }
+      })
+
+      return { caseId, documents: docs, total: docs.length }
     },
   }),
 }

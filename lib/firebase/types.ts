@@ -68,6 +68,7 @@ export interface CaseDoc {
   priority: CasePriority
   docStatus: DocStatus
   certificateRequired: boolean
+  isRetroactive?: boolean
   fmlaExpiry: string | null   // ISO
   rejectionReason: string | null
   notes: CaseNote[]

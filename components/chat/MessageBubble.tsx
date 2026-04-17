@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 interface MessageBubbleProps {
   message: UIMessage
   isStreaming?: boolean
+  suppressCards?: string[]
   onSend?: (text: string) => void
 }
 
@@ -79,11 +80,12 @@ function WorkingBadge() {
 }
 
 // ── Tool output renderer ──────────────────────────────────────────────────────
-function renderToolOutput(result: unknown, onSend?: (text: string) => void) {
+function renderToolOutput(result: unknown, onSend?: (text: string) => void, suppressCards?: string[]) {
   if (!result || typeof result !== 'object') return null
   const r = result as Record<string, unknown>
   const c = r.ui_component as string | undefined
   if (!c) return null
+  if (suppressCards?.includes(c)) return null
 
   if (c === 'BalanceChart')
     return <BalanceChart employeeName={r.employeeName as string} balances={r.balances as Record<string, number>} />
@@ -215,7 +217,7 @@ function MessageText({ content }: { content: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function MessageBubble({ message, isStreaming, onSend }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming, onSend, suppressCards }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   const textContent = (message.parts ?? [])
@@ -304,7 +306,7 @@ export function MessageBubble({ message, isStreaming, onSend }: MessageBubblePro
 
         {/* Card outputs */}
         {completedTools.map((p, i) => {
-          const card = renderToolOutput(p.output, onSend)
+          const card = renderToolOutput(p.output, onSend, suppressCards)
           if (!card) return null
           return (
             <motion.div

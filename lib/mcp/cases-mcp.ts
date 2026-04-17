@@ -49,10 +49,12 @@ export const casesMcpTools = {
       const adminData = adminSnap.data()!
       const managedIds: string[] = adminData.managedEmployeeIds ?? []
 
-      const orderField = sortBy === 'priority' ? 'createdAt' : (sortBy ?? 'createdAt')
-      const snap = await db.collection('cases').orderBy(orderField, 'desc').get()
+      const snap = await db.collection('cases').get()
 
-      let cases = snap.docs.map((d) => leanCase(d.data(), d.id))
+      const sortField = sortBy === 'startDate' ? 'startDate' : 'createdAt'
+      let cases = snap.docs
+        .map((d) => leanCase(d.data(), d.id))
+        .sort((a, b) => ((b as any)[sortField] ?? '').localeCompare((a as any)[sortField] ?? ''))
 
       if (managedIds.length > 0) {
         cases = cases.filter((c) => managedIds.includes(c.employeeId))
@@ -88,7 +90,7 @@ export const casesMcpTools = {
         ui_component: 'CaseTable',
         cases: cases.slice(0, limit),
         total: cases.length,
-        filters: { status, leaveType, docStatus, priority, department },
+        filters: { status, leaveType, docStatus, priority, department, startDateFrom, startDateTo, employeeName },
       }
     },
   }),
@@ -359,15 +361,14 @@ export const casesMcpTools = {
       const db = getAdminDb()
       const [caseSnap, logsSnap] = await Promise.all([
         db.collection('cases').doc(caseId).get(),
-        db.collection('audit_logs').where('caseId', '==', caseId).orderBy('timestamp', 'asc').get(),
+        db.collection('audit_logs').where('caseId', '==', caseId).get(),
       ])
 
       if (!caseSnap.exists) return { error: 'Case not found' }
 
-      const logs = logsSnap.docs.map((d) => ({
-        ...d.data(),
-        timestamp: toISO(d.data().timestamp),
-      }))
+      const logs = logsSnap.docs
+        .map((d) => ({ ...d.data(), timestamp: toISO(d.data().timestamp) }))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
       return {
         ui_component: 'CaseCard',
@@ -396,12 +397,12 @@ export const casesMcpTools = {
 
       const snap = await db.collection('cases')
         .where('status', '==', 'open')
-        .where('docStatus', '==', 'not_required')
         .get()
 
       let candidates = snap.docs
         .map((d) => leanCase(d.data(), d.id))
         .filter((c) => {
+          if (c.docStatus !== 'not_required') return false
           if (managedIds.length > 0 && !managedIds.includes(c.employeeId)) return false
           if (leaveType !== 'all' && c.leaveType !== leaveType) return false
           if (c.days > maxDays) return false
@@ -415,6 +416,116 @@ export const casesMcpTools = {
         candidates: candidates.slice(0, 20),
         count: candidates.length,
         message: `Found ${candidates.length} low-risk ${leaveType === 'all' ? '' : leaveType + ' '}case${candidates.length !== 1 ? 's' : ''} eligible for bulk approval. Reply "yes" to confirm.`,
+      }
+    },
+  }),
+
+  list_employees: tool({
+    description: 'List all employees the admin currently manages, or all employees in the org. Shows name, department, tenure, and whether they are managed by this admin.',
+    inputSchema: z.object({
+      adminId: z.string(),
+      showAll: z.boolean().optional().default(false).describe('true = show ALL employees in org, false = only managed ones'),
+    }),
+    execute: async ({ adminId, showAll }) => {
+      const db = getAdminDb()
+      const adminSnap = await db.collection('users').doc(adminId).get()
+      if (!adminSnap.exists) return { error: 'Admin not found' }
+      const managedIds: string[] = adminSnap.data()!.managedEmployeeIds ?? []
+
+      const snap = await db.collection('users').where('role', '==', 'employee').get()
+      let employees = snap.docs.map(d => ({
+        uid: d.id,
+        name: d.data().name,
+        email: d.data().email,
+        department: d.data().department,
+        jobTitle: d.data().jobTitle ?? '',
+        tenureYears: d.data().tenureYears ?? 0,
+        isManaged: managedIds.length === 0 || managedIds.includes(d.id),
+      }))
+
+      if (!showAll && managedIds.length > 0) {
+        employees = employees.filter(e => e.isManaged)
+      }
+
+      employees.sort((a, b) => a.name.localeCompare(b.name))
+
+      return {
+        employees,
+        managedCount: employees.filter(e => e.isManaged).length,
+        totalCount: employees.length,
+        message: showAll
+          ? `${employees.length} employees in org, ${managedIds.length > 0 ? managedIds.length + ' managed by you' : 'you manage all'}.`
+          : `${employees.length} managed employee${employees.length !== 1 ? 's' : ''}.`,
+      }
+    },
+  }),
+
+  manage_employee: tool({
+    description: 'Add or remove an employee from the admin managed list. Use action "add" to start managing an employee, "remove" to stop.',
+    inputSchema: z.object({
+      adminId: z.string(),
+      employeeId: z.string().describe('The uid of the employee to add or remove'),
+      action: z.enum(['add', 'remove']),
+    }),
+    execute: async ({ adminId, employeeId, action }) => {
+      const db = getAdminDb()
+      const adminRef = db.collection('users').doc(adminId)
+      const adminSnap = await adminRef.get()
+      if (!adminSnap.exists) return { error: 'Admin not found' }
+
+      const empSnap = await db.collection('users').doc(employeeId).get()
+      if (!empSnap.exists) return { error: 'Employee not found' }
+      const empName = empSnap.data()!.name
+
+      const currentManaged: string[] = adminSnap.data()!.managedEmployeeIds ?? []
+
+      if (action === 'add') {
+        if (currentManaged.includes(employeeId)) {
+          return { success: true, message: `${empName} is already in your managed list.` }
+        }
+        await adminRef.update({ managedEmployeeIds: [...currentManaged, employeeId] })
+        return { success: true, message: `Added ${empName} to your managed employees. You can now see their cases.` }
+      } else {
+        if (!currentManaged.includes(employeeId)) {
+          return { success: true, message: `${empName} is not in your managed list.` }
+        }
+        await adminRef.update({ managedEmployeeIds: currentManaged.filter(id => id !== employeeId) })
+        return { success: true, message: `Removed ${empName} from your managed employees. Their cases will no longer appear in your queue.` }
+      }
+    },
+  }),
+
+  search_employees: tool({
+    description: 'Search for employees by name or department. Use this when admin says "find employee John" or "who is in Engineering".',
+    inputSchema: z.object({
+      query: z.string().describe('Name or department to search'),
+    }),
+    execute: async ({ query }) => {
+      const db = getAdminDb()
+      const snap = await db.collection('users').where('role', '==', 'employee').get()
+      const q = query.toLowerCase()
+
+      const results = snap.docs
+        .map(d => ({ uid: d.id, ...d.data() }))
+        .filter((e: any) =>
+          e.name?.toLowerCase().includes(q) ||
+          e.department?.toLowerCase().includes(q) ||
+          e.email?.toLowerCase().includes(q)
+        )
+        .map((e: any) => ({
+          uid: e.uid,
+          name: e.name,
+          email: e.email,
+          department: e.department,
+          tenureYears: e.tenureYears ?? 0,
+        }))
+
+      return {
+        results,
+        total: results.length,
+        message: results.length === 0
+          ? `No employees found matching "${query}".`
+          : `Found ${results.length} employee${results.length !== 1 ? 's' : ''} matching "${query}".`,
       }
     },
   }),

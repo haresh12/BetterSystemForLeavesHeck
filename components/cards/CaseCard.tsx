@@ -86,15 +86,43 @@ export function CaseCard({ case: c, documents, auditLogs, message }: CaseCardPro
           </div>
         )}
 
-        {/* Document status */}
+        {/* Document status + link */}
         {c.certificateRequired && (
-          <div className="flex items-center gap-2 text-sm">
-            {c.docStatus === 'uploaded' ? (
-              <><FileCheck className="h-4 w-4 text-emerald-500" /><span className="text-emerald-600 dark:text-emerald-400">Document verified</span></>
-            ) : c.docStatus === 'invalid' ? (
-              <><FileX className="h-4 w-4 text-destructive" /><span className="text-destructive">Document invalid — re-upload needed</span></>
-            ) : (
-              <><FileText className="h-4 w-4 text-amber-500" /><span className="text-amber-600 dark:text-amber-400">Document pending</span></>
+          <div style={{ borderRadius: 10, padding: '10px 12px', background: c.docStatus === 'uploaded' ? '#f0fdf4' : c.docStatus === 'invalid' ? '#fef2f2' : '#fffbeb', border: `1px solid ${c.docStatus === 'uploaded' ? '#86efac' : c.docStatus === 'invalid' ? '#fecaca' : '#fcd34d'}` }}>
+            <div className="flex items-center gap-2 text-sm">
+              {c.docStatus === 'uploaded' ? (
+                <><FileCheck className="h-4 w-4" style={{ color: '#16a34a' }} /><span style={{ fontWeight: 700, color: '#14532d', fontSize: 13 }}>Document verified</span></>
+              ) : c.docStatus === 'invalid' ? (
+                <><FileX className="h-4 w-4" style={{ color: '#dc2626' }} /><span style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>Document invalid — re-upload needed</span></>
+              ) : (
+                <><FileText className="h-4 w-4" style={{ color: '#d97706' }} /><span style={{ fontWeight: 700, color: '#92400e', fontSize: 13 }}>Document pending</span></>
+              )}
+            </div>
+            {/* Show document details if available */}
+            {documents && documents.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                {documents.map((doc: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: i > 0 ? 6 : 0 }}>
+                    <FileText className="h-3.5 w-3.5" style={{ color: '#64748b' }} />
+                    <span style={{ color: '#475569', fontWeight: 600 }}>{doc.fileName ?? 'Document'}</span>
+                    {doc.extractedFields?.confidenceScore != null && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: doc.extractedFields.confidenceScore >= 0.7 ? '#dcfce7' : '#fef3c7', color: doc.extractedFields.confidenceScore >= 0.7 ? '#16a34a' : '#d97706' }}>
+                        {Math.round(doc.extractedFields.confidenceScore * 100)}%
+                      </span>
+                    )}
+                    {doc.fileUrl && (
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 12, fontWeight: 700, color: '#6366f1', textDecoration: 'none' }}
+                      >
+                        View →
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

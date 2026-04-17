@@ -6,304 +6,480 @@ import { DefaultChatTransport } from 'ai'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/AuthContext'
 import { useNotifications } from '@/hooks/useNotifications'
-import { useCaseQueue } from '@/hooks/useCaseQueue'
 import { MessageBubble, TypingRow } from '@/components/chat/MessageBubble'
 import { ChatInput, type PendingDoc } from '@/components/chat/ChatInput'
-import { ADMIN_QUICK_ACTIONS } from '@/components/chat/QuickActions'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { NotificationBell } from '@/components/ui/notification-panel'
+import { KPICards } from '@/components/admin/KPICards'
+import { CaseTableAdmin } from '@/components/admin/CaseTableAdmin'
+import { CaseSlideOver } from '@/components/admin/CaseSlideOver'
+import { DynamicTabs, type DynamicTab } from '@/components/admin/DynamicTabs'
+import { QuickFilters } from '@/components/admin/QuickFilters'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  MessageSquare, Bell, LogOut, ChevronDown,
-  Clock, FileText, Zap, Settings,
+  Shield, LogOut, Plus, Users, RefreshCw, Sparkles,
+  UserPlus, UserMinus, Search, X,
 } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
+import { db } from '@/lib/firebase/client'
+import { collection, query, where, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore'
+import type { CaseDoc } from '@/lib/firebase/types'
 
 const adminTransport = new DefaultChatTransport({ api: '/api/admin-chat' })
+const TYPE_COLORS: Record<string, string> = {
+  PTO: '#6366f1', Sick: '#f59e0b', Personal: '#10b981', FMLA: '#ef4444',
+  Maternity: '#ec4899', Paternity: '#3b82f6', Bereavement: '#8b5cf6',
+  Intermittent: '#f97316', CompOff: '#06b6d4',
+}
+
+function toISO(ts: any): string {
+  if (!ts) return new Date().toISOString()
+  if (typeof ts === 'string') return ts
+  if (ts?.toDate) return ts.toDate().toISOString()
+  return new Date().toISOString()
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter()
   const { profile, signOut } = useAuth()
-  const { notifications: _n, unreadCount } = useNotifications(profile?.uid)
-  const { summary, loading: queueLoading } = useCaseQueue(profile?.managedEmployeeIds)
+  const { notifications: notifList, unreadCount, markAllRead } = useNotifications(profile?.uid)
+
   const [input, setInput] = useState('')
   const [pendingFile, setPendingFile] = useState<PendingDoc | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [showQuickActions, setShowQuickActions] = useState(false)
-  const [triageDone, setTriageDone] = useState(false)
-  const [userHasSentMessage, setUserHasSentMessage] = useState(false)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
-  const { messages, sendMessage, status } = useChat({
+  // Real-time cases
+  const [allCases, setAllCases] = useState<(CaseDoc & { caseId: string })[]>([])
+  const [casesLoading, setCasesLoading] = useState(true)
+
+  // Dynamic tabs
+  const [tabs, setTabs] = useState<DynamicTab[]>([
+    { id: 'all', label: 'All Cases', caseIds: [], color: '#6366f1', createdByAI: false, pinned: true },
+  ])
+  const [activeTabId, setActiveTabId] = useState('all')
+
+  // AI verdicts per case
+  const [aiVerdicts, setAiVerdicts] = useState<Record<string, 'safe' | 'review' | 'flag'>>({})
+  const [reviewingCaseIds, setReviewingCaseIds] = useState<Set<string>>(new Set())
+
+  // UI
+  const [selectedCase, setSelectedCase] = useState<(CaseDoc & { caseId: string }) | null>(null)
+  const [empPanelOpen, setEmpPanelOpen] = useState(false)
+  const [allEmployees, setAllEmployees] = useState<Array<{ uid: string; name: string; email: string; department: string }>>([])
+  const [managedIds, setManagedIds] = useState<string[]>([])
+  const [empSearch, setEmpSearch] = useState('')
+  const [empLoading, setEmpLoading] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  // Chat
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: adminTransport,
     onError: (err) => toast.error(err.message ?? 'Something went wrong'),
   })
-
   const isLoading = status === 'streaming' || status === 'submitted'
-
-  // Standalone typing indicator
   const visibleMessages = messages.filter(
     (m) => !(m.role === 'user' && m.parts.some((p) => p.type === 'text' && (p as any).text === '__PROACTIVE_SCAN__')),
   )
-  const showTypingRow =
-    isLoading &&
-    visibleMessages.length > 0 &&
-    visibleMessages[visibleMessages.length - 1].role === 'user'
-
-  // Auto-scroll
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages, showTypingRow])
-
-  // Show quick actions after triage, hide on user message
-  useEffect(() => {
-    if (triageDone && messages.length > 0 && !userHasSentMessage) {
-      setShowQuickActions(true)
-    }
-  }, [triageDone, messages.length, userHasSentMessage])
-
-  // Proactive triage on load
-  const sendMessageRef = useRef(sendMessage)
-  sendMessageRef.current = sendMessage
 
   useEffect(() => {
-    if (!triageDone && profile?.uid && status === 'ready') {
-      setTriageDone(true)
-      const t = setTimeout(() => sendMessageRef.current({ text: '__PROACTIVE_SCAN__' }), 800)
-      return () => clearTimeout(t)
-    }
-  }, [profile?.uid, triageDone, status])
+    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+  }, [messages])
 
-  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setInput(e.target.value)
+  // Real-time Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'cases'), (snap) => {
+      const cases = snap.docs
+        .map(d => ({ caseId: d.id, ...d.data() } as CaseDoc & { caseId: string }))
+        .sort((a, b) => toISO(b.createdAt).localeCompare(toISO(a.createdAt)))
+      setAllCases(cases)
+      setCasesLoading(false)
+      setTabs(prev => prev.map(t => t.id === 'all' ? { ...t, caseIds: cases.filter(c => c.status === 'open' || c.status === 'pending_docs').map(c => c.caseId) } : t))
+    })
+    return unsub
+  }, [])
+
+  // Watch for AI tool outputs → create dynamic tabs
+  useEffect(() => {
+    console.log('[TAB] Messages changed, count:', messages.length)
+    if (messages.length === 0) return
+    const lastMsg = messages[messages.length - 1]
+    console.log('[TAB] Last message role:', lastMsg.role, 'parts count:', (lastMsg.parts ?? []).length)
+    if (lastMsg.role !== 'assistant') return
+
+    for (const part of (lastMsg.parts ?? [])) {
+      const p = part as any
+      console.log('[TAB] Part type:', p.type, 'state:', p.state, 'hasOutput:', !!p.output)
+      if (!p.type) continue
+      const isToolPart = p.type === 'dynamic-tool' || (typeof p.type === 'string' && p.type.startsWith('tool-'))
+      console.log('[TAB] isToolPart:', isToolPart, 'type:', p.type)
+      if (!isToolPart) continue
+      if (p.state !== 'output-available' || !p.output) { console.log('[TAB] Skipped: state=', p.state, 'output=', !!p.output); continue }
+
+      console.log('[TAB] ✅ Tool output found! ui_component:', p.output.ui_component, 'cases:', (p.output.cases as any[])?.length, 'filters:', JSON.stringify(p.output.filters))
+
+      if (p.output.ui_component === 'CaseTable') {
+        const cases = (p.output.cases as any[]) ?? []
+        if (cases.length === 0) continue
+        const caseIds = cases.map((c: any) => c.caseId)
+        const filters = p.output.filters ?? {}
+
+        let tabLabel = 'Filtered'
+        let tabColor = '#6366f1'
+        const lt = filters.leaveType
+        const ds = filters.docStatus
+        const pr = filters.priority
+        const dp = filters.department
+        const en = filters.employeeName
+        const sdf = filters.startDateFrom
+        const sdt = filters.startDateTo
+
+        if (lt && lt !== 'all') { tabLabel = lt; tabColor = TYPE_COLORS[lt] ?? '#6366f1' }
+        else if (ds === 'missing') { tabLabel = 'Missing Docs'; tabColor = '#f59e0b' }
+        else if (pr === 'high') { tabLabel = 'High Priority'; tabColor = '#ef4444' }
+        else if (sdf || sdt) {
+          const tmrw = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+          tabLabel = (sdf === tmrw || sdt === tmrw) ? 'Starting Tomorrow' : `${sdf ?? ''} → ${sdt ?? ''}`
+          tabColor = '#ef4444'
+        }
+        else if (en) { tabLabel = en; tabColor = '#8b5cf6' }
+        else if (dp) { tabLabel = dp; tabColor = '#8b5cf6' }
+        else if (p.output.viewLabel) { tabLabel = p.output.viewLabel }
+
+        console.log('[TAB] Tab label:', tabLabel, 'color:', tabColor, 'caseIds:', caseIds.length)
+        const existing = tabs.find(t => t.label === tabLabel && t.id !== 'all')
+        if (existing) {
+          console.log('[TAB] Updating existing tab:', existing.id)
+          setTabs(prev => prev.map(t => t.id === existing.id ? { ...t, caseIds } : t))
+          setActiveTabId(existing.id)
+        } else {
+          const newTab: DynamicTab = { id: `ai-${Date.now()}`, label: tabLabel, caseIds, color: tabColor, createdByAI: true }
+          console.log('[TAB] ✅ NEW TAB:', newTab.label, 'cases:', newTab.caseIds.length)
+          setTabs(prev => [...prev, newTab])
+          setActiveTabId(newTab.id)
+        }
+      }
+    }
+  }, [messages])
+
+  // Parse AI review text for verdicts (✅/⚠️/❌ patterns)
+  useEffect(() => {
+    if (messages.length === 0) return
+    const lastMsg = messages[messages.length - 1]
+    if (lastMsg.role !== 'assistant') return
+
+    const textParts = (lastMsg.parts ?? []).filter((p: any) => p.type === 'text').map((p: any) => p.text).join('')
+    if (!textParts) return
+
+    const newVerdicts: Record<string, 'safe' | 'review' | 'flag'> = {}
+    const lines = textParts.split('\n')
+
+    for (const line of lines) {
+      // Match employee names with verdicts
+      for (const c of allCases) {
+        if (!c.employeeName) continue
+        const nameInLine = line.includes(c.employeeName)
+        if (!nameInLine) continue
+
+        if (line.includes('✅') || line.toLowerCase().includes('approve') && !line.toLowerCase().includes('not')) {
+          newVerdicts[c.caseId] = 'safe'
+        } else if (line.includes('⚠️') || line.toLowerCase().includes('review') || line.toLowerCase().includes('overlap') || line.toLowerCase().includes('needs your')) {
+          newVerdicts[c.caseId] = 'review'
+        } else if (line.includes('❌') || line.toLowerCase().includes('reject') || line.toLowerCase().includes('flag') || line.toLowerCase().includes('suspicious')) {
+          newVerdicts[c.caseId] = 'flag'
+        }
+      }
+    }
+
+    if (Object.keys(newVerdicts).length > 0) {
+      setAiVerdicts(prev => ({ ...prev, ...newVerdicts }))
+      setReviewingCaseIds(new Set())
+    }
+  }, [messages, allCases])
+
+  // Active tab cases
+  const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0]
+  const displayCases = activeTab.id === 'all'
+    ? allCases.filter(c => c.status === 'open' || c.status === 'pending_docs')
+    : allCases.filter(c => activeTab.caseIds.includes(c.caseId))
+
+  // KPIs
+  const today = new Date().toISOString().split('T')[0]
+  const openCases = allCases.filter(c => c.status === 'open' || c.status === 'pending_docs')
+  const kpi = {
+    needsAction: openCases.length,
+    outToday: allCases.filter(c => ['approved', 'open'].includes(c.status) && c.startDate <= today && c.endDate >= today).length,
+    complianceAlerts: allCases.filter(c => c.fmlaExpiry && !['cancelled', 'rejected'].includes(c.status)).length,
+    pendingDocs: allCases.filter(c => c.docStatus === 'missing').length,
   }
 
-  function handleQuickAction(message: string) {
-    setUserHasSentMessage(true)
-    setShowQuickActions(false)
-    sendMessage({ text: message })
+  // ── Actions (all go through chat → AI → MCP) ──
+  function sendChatMessage(msg: string) {
+    sendMessage({ text: msg })
   }
 
-  function handleFileAwareSubmit(e: React.FormEvent) {
+  function handleSend(e: React.FormEvent) {
     e.preventDefault()
-    if (!input.trim() && !pendingFile) return
-    setUserHasSentMessage(true)
-    setShowQuickActions(false)
-    if (pendingFile) {
-      sendMessage({ text: `${input || 'Reviewing this document.'}\n\n[DOCUMENT_ATTACHED: ${pendingFile.name}]\n[BASE64: ${pendingFile.base64}]` })
-      setPendingFile(null)
-    } else {
-      sendMessage({ text: input })
-    }
+    if (!input.trim()) return
+    sendChatMessage(input)
     setInput('')
   }
 
-  async function handleSignOut() {
-    await signOut()
-    router.push('/login')
+  function handleApproveViaChat(caseId: string) {
+    sendChatMessage(`Approve case ${caseId}`)
   }
 
-  const initials = profile?.name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() ?? 'A'
+  function handleRejectViaChat(caseId: string, reason: string) {
+    sendChatMessage(`Reject case ${caseId}, reason: ${reason}`)
+  }
+
+  function handleAIReview(tabId: string) {
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab) return
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, reviewing: true } : t))
+    setReviewingCaseIds(new Set(tab.caseIds))
+    sendChatMessage(`Review all ${tab.caseIds.length} cases in the "${tab.label}" tab. Go through each case one by one with your verdict.`)
+  }
+
+  function handleApproveAllSafe(tabId: string) {
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab) return
+    const safeCaseIds = tab.caseIds.filter(id => aiVerdicts[id] === 'safe')
+    if (safeCaseIds.length === 0) return
+    sendChatMessage(`Approve these ${safeCaseIds.length} safe cases: ${safeCaseIds.join(', ')}`)
+  }
+
+  function handleFilterByType(msg: string) {
+    sendChatMessage(msg)
+  }
+
+  function handleNewChat() {
+    setMessages([])
+    setInput('')
+    setAiVerdicts({})
+    setReviewingCaseIds(new Set())
+  }
+
+  async function handleResetDemo() {
+    setResetting(true)
+    try {
+      await fetch('/api/admin/reset-mock', { method: 'POST', credentials: 'include' })
+      toast.success('Mock data cleared. Run seed to re-populate.')
+      handleNewChat()
+      setTabs([{ id: 'all', label: 'All Cases', caseIds: [], color: '#6366f1', createdByAI: false, pinned: true }])
+      setActiveTabId('all')
+      setAiVerdicts({})
+    } catch { toast.error('Reset failed') }
+    setResetting(false)
+  }
+
+  // Employee management
+  async function loadEmployees() {
+    if (!profile?.uid) return
+    setEmpLoading(true)
+    try {
+      const empSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'employee')))
+      setAllEmployees(empSnap.docs.map(d => ({ uid: d.id, name: d.data().name, email: d.data().email, department: d.data().department })).sort((a, b) => a.name.localeCompare(b.name)))
+      const adminSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')))
+      const me = adminSnap.docs.find(d => d.id === profile.uid)
+      setManagedIds(me?.data().managedEmployeeIds ?? [])
+    } catch {} // eslint-disable-line
+    setEmpLoading(false)
+  }
+
+  async function toggleEmployee(empId: string) {
+    if (!profile?.uid) return
+    const isManaged = managedIds.includes(empId)
+    const updated = isManaged ? managedIds.filter(id => id !== empId) : [...managedIds, empId]
+    setManagedIds(updated)
+    try { await updateDoc(doc(db, 'users', profile.uid), { managedEmployeeIds: updated }); toast.success(isManaged ? 'Removed' : 'Added') }
+    catch { toast.error('Failed'); setManagedIds(managedIds) } // eslint-disable-line
+  }
+
+  async function handleSignOut() { await signOut(); router.push('/login') }
+  const firstName = profile?.name?.split(' ')[0] ?? 'Admin'
 
   return (
-    <div className="flex flex-col h-screen bg-background dark">
-      <Toaster position="top-right" />
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#f0f1f5' }}>
+      <Toaster position="top-right" toastOptions={{ style: { borderRadius: 12, border: '1px solid #e8e8f0', background: '#fff', color: '#1a1a2e' } }} />
 
-      {/* ── Header ── */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-2.5 glass-panel">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-brand to-violet-700 flex items-center justify-center shadow-lg shadow-brand/20 border border-brand/20">
-              <Zap className="h-4 w-4 text-white" />
+      {/* ═══ LEFT: DASHBOARD ═══ */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Header */}
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', background: '#fff', borderBottom: '1px solid #e8e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ height: 34, width: 34, borderRadius: 10, background: 'linear-gradient(135deg, #ef4444, #f97316)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 12px rgba(239,68,68,0.3)' }}>
+              <Shield className="h-4 w-4" style={{ color: '#fff' }} />
             </div>
-            <div className="leading-none">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold tracking-tight">ConvoWork</span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 hidden sm:flex">Admin</Badge>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 15, fontWeight: 900, color: '#1a1a2e' }}>ConvoWork</span>
+                <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: '#fef2f2', color: '#ef4444' }}>ADMIN</span>
               </div>
-              <p className="text-[10px] text-muted-foreground">{profile?.department}</p>
+              <p style={{ fontSize: 11, color: '#94a3b8' }}>{firstName} · {openCases.length} open cases</p>
             </div>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <button onClick={() => { setEmpPanelOpen(true); loadEmployees() }} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe', cursor: 'pointer' }}>
+              <Users className="h-3 w-3" /> Team
+            </button>
+            <button onClick={handleResetDemo} disabled={resetting} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
+              <RefreshCw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} /> Reset
+            </button>
+            <NotificationBell notifications={notifList} unreadCount={unreadCount} onMarkAllRead={markAllRead} />
+            <button onClick={handleSignOut} style={{ height: 30, width: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </header>
 
-          <Separator orientation="vertical" className="h-5 hidden sm:block" />
+        {/* Dashboard content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
+          <KPICards data={kpi} activeFilter={null} onFilter={() => {}} />
 
-          {/* Live queue stats */}
-          {!queueLoading && (
-            <div className="hidden sm:flex items-center gap-2 text-xs">
-              <StatChip icon={<Clock className="h-3 w-3" />} color="text-brand" value={summary.openCount} label="Open" />
-              <StatChip icon={<FileText className="h-3 w-3" />} color="text-amber-400" value={summary.pendingDocsCount} label="Docs" urgent={summary.pendingDocsCount > 0} />
-              <StatChip icon={<Zap className="h-3 w-3" />} color="text-muted-foreground" value={summary.totalActive} label="Active" />
-            </div>
-          )}
-        </div>
+          {/* Quick filters — each sends chat message */}
+          <div style={{ marginTop: 12 }}>
+            <QuickFilters onFilter={sendChatMessage} />
+          </div>
 
-        <div className="flex items-center gap-1.5">
-          <Button variant="ghost" size="icon" className="relative h-8 w-8">
-            <Bell className="h-4 w-4" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 flex items-center justify-center bg-destructive text-white text-[10px] rounded-full font-bold">
-                {unreadCount > 9 ? '9+' : unreadCount}
+          {/* Table container with dynamic tabs */}
+          <div style={{ marginTop: 12, background: '#fff', borderRadius: 14, border: '1px solid #e8e8f0', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.03)' }}>
+            <DynamicTabs
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onTabClick={setActiveTabId}
+              onTabClose={(id) => { setTabs(prev => prev.filter(t => t.id !== id)); if (activeTabId === id) setActiveTabId('all') }}
+              onAIReview={handleAIReview}
+              onApproveAllSafe={handleApproveAllSafe}
+              aiVerdicts={aiVerdicts}
+            />
+            {casesLoading ? (
+              <div style={{ padding: 48, textAlign: 'center' }}><p style={{ fontSize: 14, color: '#94a3b8' }}>Loading...</p></div>
+            ) : (
+              <CaseTableAdmin
+                cases={displayCases}
+                onCaseClick={setSelectedCase}
+                onApprove={handleApproveViaChat}
+                onFilterByType={sendChatMessage}
+                aiVerdicts={aiVerdicts}
+                reviewingCaseIds={reviewingCaseIds}
+              />
+            )}
+            <div style={{ padding: '8px 16px', borderTop: '1px solid #f0f0f5', background: '#fafafc' }}>
+              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                {displayCases.length} cases · Click type/dept to filter · Click row for AI analysis
               </span>
-            )}
-          </Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2 h-8 px-2">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback className="text-[10px] bg-brand/20 text-brand font-semibold">{initials}</AvatarFallback>
-                </Avatar>
-                <span className="text-sm hidden sm:inline">{profile?.name?.split(' ')[0]}</span>
-                <ChevronDown className="h-3 w-3 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{profile?.name}</p>
-                <p className="text-xs text-muted-foreground">{profile?.email}</p>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem><Settings className="h-4 w-4 mr-2" /> Settings</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                <LogOut className="h-4 w-4 mr-2" /> Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </div>
+          </div>
         </div>
-      </header>
+      </div>
 
-      {/* ── Chat area ── */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="max-w-xl mx-auto">
+      {/* ═══ RIGHT: AI CHAT ═══ */}
+      <div style={{ width: 440, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fafaff', borderLeft: '1px solid #e8e8f0' }}>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid #e8e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(99,102,241,0.04), rgba(139,92,246,0.02))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ height: 24, width: 24, borderRadius: 6, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles className="h-3 w-3" style={{ color: '#fff' }} />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>AI Command</span>
+            {isLoading && <motion.div style={{ height: 5, width: 5, borderRadius: '50%', background: '#ef4444' }} animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 1 }} />}
+          </div>
+          <button onClick={handleNewChat} style={{ height: 24, width: 24, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: '#f1f5f9', border: 'none', cursor: 'pointer' }}>
+            <Plus className="h-3 w-3" />
+          </button>
+        </div>
 
-          {/* Empty / scanning state */}
-          <AnimatePresence>
-            {visibleMessages.length === 0 && (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                className="flex flex-col items-center justify-center min-h-[calc(100vh-130px)] px-6 py-16 text-center"
-              >
-                <motion.div
-                  initial={{ scale: 0.75, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.05, type: 'spring', stiffness: 200, damping: 18 }}
-                  className="relative mb-8"
-                >
-                  <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-brand/20 to-violet-900/40 border border-brand/25 flex items-center justify-center">
-                    <Zap className="h-9 w-9 text-brand" />
-                  </div>
-                  {[1, 1.4, 1.8].map((scale, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute inset-0 rounded-3xl border border-brand/20"
-                      animate={{ scale: [1, scale, 1], opacity: [0.6, 0, 0.6] }}
-                      transition={{ repeat: Infinity, duration: 2.5, ease: 'easeOut', delay: i * 0.6 }}
-                    />
-                  ))}
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <h2 className="text-xl font-bold mb-2">Command Center</h2>
-                  <p className="text-sm text-muted-foreground">Running morning intelligence scan…</p>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Messages */}
-          {visibleMessages.length > 0 && (
-            <div className="py-4">
-              {visibleMessages.map((message, i) => (
+        <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto' }}>
+          {visibleMessages.length === 0 ? (
+            <div style={{ padding: '28px 14px', textAlign: 'center' }}>
+              <Sparkles className="h-6 w-6 mx-auto" style={{ color: '#c7d2fe', marginBottom: 6 }} />
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>AI Ready</p>
+              <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Type a filter, review, or approve command</p>
+            </div>
+          ) : (
+            <div style={{ padding: '4px 0' }}>
+              {visibleMessages.map((msg, i) => (
                 <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isStreaming={isLoading && i === messages.length - 1 && message.role === 'assistant'}
+                  key={msg.id}
+                  message={msg}
+                  isStreaming={isLoading && i === visibleMessages.length - 1 && msg.role === 'assistant'}
+                  onSend={(text) => sendChatMessage(text)}
+                  suppressCards={['CaseTable', 'ProactiveAlertCard', 'TrendCard']}
                 />
               ))}
               <AnimatePresence>
-                {showTypingRow && <TypingRow key="typing" isAdmin />}
+                {isLoading && visibleMessages.length > 0 && visibleMessages[visibleMessages.length - 1].role === 'user' && (
+                  <TypingRow key="typing" isAdmin />
+                )}
               </AnimatePresence>
-              <div className="h-4" />
+              <div style={{ height: 6 }} />
             </div>
           )}
         </div>
-      </div>
 
-      {/* ── Input area ── */}
-      <div className="glass-panel border-t-0 shadow-[0_-8px_24px_-8px_rgba(0,0,0,0.3)]">
-        <div className="max-w-xl mx-auto px-4 pb-4 pt-3">
-          {/* Quick action chips */}
-          <AnimatePresence>
-            {showQuickActions && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="flex gap-1.5 mb-2.5 overflow-x-auto no-scrollbar pb-0.5"
-              >
-                {ADMIN_QUICK_ACTIONS.map((action) => (
-                  <button
-                    key={action.message}
-                    onClick={() => handleQuickAction(action.message)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/60 bg-muted/40 hover:bg-muted text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
-                  >
-                    {action.icon && <span>{action.icon}</span>}
-                    {action.label}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* Quick action chips */}
+        <div style={{ padding: '5px 10px', display: 'flex', gap: 4, flexWrap: 'wrap', borderTop: '1px solid #f0f0f5' }}>
+          {[
+            { label: 'Review PTO', msg: 'Show all PTO cases' },
+            { label: 'Personal', msg: 'Show all Personal leave cases' },
+            { label: 'Missing docs', msg: 'Show cases with missing documents' },
+            { label: 'Starting tomorrow', msg: 'Show cases where leave starts tomorrow' },
+            { label: 'Patterns', msg: 'Check for suspicious leave patterns' },
+            { label: 'Coverage', msg: 'Show team coverage for next week' },
+            { label: 'Triage', msg: 'What needs my attention today?' },
+          ].map(a => (
+            <button key={a.label} onClick={() => sendChatMessage(a.msg)} style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 99, border: '1px solid #e8e8f0', background: '#fff', color: '#6366f1', cursor: 'pointer' }}>
+              {a.label}
+            </button>
+          ))}
+        </div>
 
-          <ChatInput
-            input={input}
-            isLoading={isLoading}
-            onInputChange={handleInputChange}
-            onSubmit={handleFileAwareSubmit}
-            placeholder="Query cases, approve, reject, run analytics…"
-            pendingFile={pendingFile}
-            onFileAttach={setPendingFile}
-          />
-          <p className="text-[11px] text-center text-muted-foreground mt-1.5 select-none">
-            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Enter</kbd> to send ·{' '}
-            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px]">Shift+Enter</kbd> new line
-          </p>
+        <div style={{ padding: '6px 10px 10px' }}>
+          <ChatInput input={input} isLoading={isLoading} onInputChange={(e) => setInput(e.target.value)} onSubmit={handleSend} placeholder="Filter, review, approve..." pendingFile={pendingFile} onFileAttach={setPendingFile} hideUpload />
         </div>
       </div>
-    </div>
-  )
-}
 
-function StatChip({
-  icon, color, value, label, urgent = false,
-}: {
-  icon: React.ReactNode
-  color: string
-  value: number
-  label: string
-  urgent?: boolean
-}) {
-  return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${urgent ? 'bg-amber-500/10' : 'bg-muted/40'}`}>
-      <span className={color}>{icon}</span>
-      <span className={`font-bold ${urgent ? 'text-amber-400' : ''}`}>{value}</span>
-      <span className="text-muted-foreground">{label}</span>
+      {/* Slide-over */}
+      <AnimatePresence>
+        {selectedCase && (
+          <CaseSlideOver caseData={selectedCase} onClose={() => setSelectedCase(null)} onApprove={(id) => handleApproveViaChat(id)} onReject={(id, reason) => handleRejectViaChat(id, reason)} />
+        )}
+      </AnimatePresence>
+
+      {/* Employee panel */}
+      <AnimatePresence>
+        {empPanelOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEmpPanelOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 360, zIndex: 70, background: '#fff', boxShadow: '-8px 0 32px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #ebebf0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#1a1a2e' }}>Manage Team</p>
+                <button onClick={() => setEmpPanelOpen(false)} style={{ height: 26, width: 26, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', background: '#f1f5f9', border: 'none', cursor: 'pointer' }}><X className="h-3.5 w-3.5" /></button>
+              </div>
+              <div style={{ padding: '6px 16px', borderBottom: '1px solid #f0f0f5' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 7, background: '#f8f9fc', border: '1px solid #e8e8f0' }}>
+                  <Search className="h-3 w-3" style={{ color: '#94a3b8' }} />
+                  <input value={empSearch} onChange={(e) => setEmpSearch(e.target.value)} placeholder="Search..." style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1a1a2e' }} />
+                </div>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
+                {empLoading ? <p style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>Loading...</p> : (
+                  allEmployees.filter(e => !empSearch || e.name.toLowerCase().includes(empSearch.toLowerCase())).map(emp => {
+                    const managed = managedIds.length === 0 || managedIds.includes(emp.uid)
+                    return (
+                      <div key={emp.uid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, marginBottom: 2, background: managed ? '#f0fdf4' : '#fff', border: managed ? '1px solid #86efac' : '1px solid #f0f0f5' }}>
+                        <div style={{ height: 26, width: 26, borderRadius: 6, background: managed ? '#dcfce7' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: managed ? '#16a34a' : '#64748b', flexShrink: 0 }}>{emp.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}><p style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>{emp.name}</p><p style={{ fontSize: 10, color: '#94a3b8' }}>{emp.department}</p></div>
+                        <button onClick={() => toggleEmployee(emp.uid)} style={{ height: 24, padding: '0 8px', borderRadius: 5, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2, border: 'none', cursor: 'pointer', background: managed ? '#fee2e2' : '#dcfce7', color: managed ? '#dc2626' : '#16a34a' }}>
+                          {managed ? <><UserMinus className="h-2.5 w-2.5" />Remove</> : <><UserPlus className="h-2.5 w-2.5" />Add</>}
+                        </button>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

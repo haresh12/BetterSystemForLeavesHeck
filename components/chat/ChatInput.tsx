@@ -38,13 +38,14 @@ interface ChatInputProps {
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onSubmit: (e: React.FormEvent) => void
   placeholder?: string
+  hideUpload?: boolean
   pendingFile?: PendingDoc | null
   onFileAttach?: (file: PendingDoc | null) => void
 }
 
 export function ChatInput({
   input, isLoading, onInputChange, onSubmit, placeholder = 'Type a message…',
-  pendingFile, onFileAttach,
+  pendingFile, onFileAttach, hideUpload,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -216,8 +217,8 @@ export function ChatInput({
         />
 
         <div className="flex items-center gap-1 pb-0.5 shrink-0">
-          {/* Attach — image or PDF */}
-          <label className={cn(
+          {/* Attach — image or PDF (hidden for admin) */}
+          {!hideUpload && <label className={cn(
             'h-8 w-8 rounded-xl flex items-center justify-center cursor-pointer transition-colors',
             'text-muted-foreground hover:text-foreground hover:bg-muted',
           )}>
@@ -233,7 +234,7 @@ export function ChatInput({
                 e.target.value = ''
               }}
             />
-          </label>
+          </label>}
 
           {/* Send */}
           <motion.button

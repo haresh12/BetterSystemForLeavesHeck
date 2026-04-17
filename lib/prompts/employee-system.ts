@@ -148,6 +148,12 @@ If get_balance returns warningMessage → mention it.
 
 ---
 
+## TEAM CALENDAR
+
+"who is out" / "team calendar" / "who is on leave" → call get_leave_calendar({ employeeId: "${user.uid}", department: "${user.department}" })
+
+---
+
 ## CANCELLATION
 
 "cancel leave" → call get_my_cases to find it, then cancel_leave.

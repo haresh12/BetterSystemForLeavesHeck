@@ -27,13 +27,12 @@ export const analyticsMcpTools = {
       cutoff.setDate(cutoff.getDate() - periodDays)
       const cutoffISO = cutoff.toISOString()
 
-      const snap = await db.collection('cases')
-        .where('status', 'in', ['approved', 'open', 'under_review'])
-        .get()
+      const snap = await db.collection('cases').get()
 
+      const validStatuses = ['approved', 'open', 'under_review']
       const cases = snap.docs
         .map((d) => ({ caseId: d.id, ...d.data() } as CaseDoc & { caseId: string }))
-        .filter((c) => toISO((c as any).createdAt) >= cutoffISO)
+        .filter((c) => validStatuses.includes(c.status) && toISO((c as any).createdAt) >= cutoffISO)
 
       const deptMap: Record<string, {
         department: string
@@ -77,7 +76,7 @@ export const analyticsMcpTools = {
       cutoff.setDate(cutoff.getDate() - weeks * 7)
       const cutoffISO = cutoff.toISOString()
 
-      const snap = await db.collection('cases').orderBy('createdAt', 'desc').get()
+      const snap = await db.collection('cases').get()
 
       const cases = snap.docs
         .map((d) => ({ ...d.data() } as CaseDoc))
@@ -122,13 +121,11 @@ export const analyticsMcpTools = {
       cutoff.setDate(cutoff.getDate() - periodDays)
       const cutoffISO = cutoff.toISOString()
 
-      const snap = await db.collection('cases')
-        .where('status', 'in', ['approved', 'rejected'])
-        .get()
+      const snap = await db.collection('cases').get()
 
       const cases = snap.docs
         .map((d) => d.data() as CaseDoc)
-        .filter((c) => toISO((c as any).createdAt) >= cutoffISO)
+        .filter((c) => ['approved', 'rejected'].includes(c.status) && toISO((c as any).createdAt) >= cutoffISO)
 
       const typeMap: Record<string, { leaveType: string; approved: number; rejected: number; total: number; approvalRate: number }> = {}
 

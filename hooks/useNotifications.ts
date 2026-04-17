@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { useState, useEffect, useCallback } from 'react'
+import { collection, query, where, onSnapshot, writeBatch, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/client'
 import type { NotificationDoc } from '@/lib/firebase/types'
 
@@ -38,5 +38,14 @@ export function useNotifications(userId: string | undefined) {
     return unsub
   }, [userId])
 
-  return { notifications, unreadCount, loading }
+  const markAllRead = useCallback(async () => {
+    if (!userId) return
+    const unread = notifications.filter(n => !n.read)
+    if (unread.length === 0) return
+    const batch = writeBatch(db)
+    unread.forEach(n => batch.update(doc(db, 'notifications', n.notificationId!), { read: true }))
+    await batch.commit()
+  }, [userId, notifications])
+
+  return { notifications, unreadCount, loading, markAllRead }
 }

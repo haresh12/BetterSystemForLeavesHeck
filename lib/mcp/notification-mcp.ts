@@ -116,12 +116,12 @@ export const notificationMcpTools = {
       if (!adminSnap.exists) return { alerts: [] }
       const managedIds: string[] = adminSnap.data()!.managedEmployeeIds ?? []
 
-      const snap = await db.collection('cases')
-        .where('status', 'in', ['open', 'pending_docs', 'under_review'])
-        .get()
+      const snap = await db.collection('cases').get()
 
+      const activeStatuses = ['open', 'pending_docs', 'under_review']
       let cases = snap.docs
         .map((d) => ({ caseId: d.id, ...d.data() } as CaseDoc & { caseId: string }))
+        .filter((c) => activeStatuses.includes(c.status))
         .sort((a, b) => toISO((b as any).createdAt).localeCompare(toISO((a as any).createdAt)))
       if (managedIds.length > 0) {
         cases = cases.filter((c) => managedIds.includes(c.employeeId))
