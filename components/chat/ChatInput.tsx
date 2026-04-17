@@ -11,6 +11,7 @@ import { DocumentChecklistCard, type CheckItem } from '@/components/chat/Documen
 export interface DocResult {
   isValid: boolean
   invalidReason?: string | null
+  patientName?: string | null
   doctorName?: string | null
   hospital?: string | null
   recommendedRestStart?: string | null
@@ -45,7 +46,7 @@ interface ChatInputProps {
 
 export function ChatInput({
   input, isLoading, onInputChange, onSubmit, placeholder = 'Type a message…',
-  pendingFile, onFileAttach, hideUpload,
+  hideUpload, pendingFile, onFileAttach,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getAdminDb } from '@/lib/firebase/admin'
 import type { CaseDoc, LeanCase, LeaveType } from '@/lib/firebase/types'
-import { daysBetween, countBusinessDays, COMPANY_HOLIDAYS } from '@/lib/utils'
+import { daysBetween, countBusinessDays, COMPANY_HOLIDAYS, toLocalISODate } from '@/lib/utils'
 
 function toISO(ts: any): string {
   if (!ts) return new Date().toISOString()
@@ -36,6 +36,32 @@ const TYPE_META_FOR_PICKER: Record<string, { desc: string; maxDays: number; cert
   CompOff:       { desc: 'Time off in lieu of overtime',         maxDays: 10, cert: false,      color: '#0891b2' },
   Unpaid:        { desc: 'Unpaid extended leave',                maxDays: 30, cert: false,      color: '#64748b' },
   Intermittent:  { desc: 'Recurring medical condition',          maxDays: 60, cert: 'Always',   color: '#ea580c' },
+}
+
+const BALANCE_DISPLAY_ALIASES: Record<string, Array<{ key: string; max?: number }>> = {
+  pto: [{ key: 'pto' }, { key: 'compoff', max: 10 }],
+  sick: [{ key: 'sick' }, { key: 'emergencyleave', max: 3 }],
+  personal: [{ key: 'personal' }],
+  bereavement: [{ key: 'bereavement' }],
+  paternity: [{ key: 'paternity' }],
+  maternity: [{ key: 'maternity' }],
+  fmla: [{ key: 'fmla' }, { key: 'intermittent', max: 60 }],
+  unpaid: [{ key: 'unpaid' }],
+}
+
+const EMPTY_BALANCES: Record<string, number> = {
+  pto: 0,
+  sick: 0,
+  personal: 0,
+  bereavement: 0,
+  maternity: 0,
+  paternity: 0,
+  fmla: 0,
+  unpaid: 0,
+}
+
+function normalizeBalances(balances?: Record<string, number>): Record<string, number> {
+  return { ...EMPTY_BALANCES, ...(balances ?? {}) }
 }
 
 // ── Overlap detection ─────────────────────────────────────────────────────────
@@ -81,10 +107,16 @@ export const leaveMcpTools = {
       const snap = await db.collection('users').doc(employeeId).get()
       if (!snap.exists) return { error: 'Employee not found' }
       const data = snap.data()!
-      let balances: Record<string, number> = data.balances ?? {}
+      const rawBalances = normalizeBalances(data.balances)
+      let balances: Record<string, number> = Object.fromEntries(
+        Object.entries(BALANCE_DISPLAY_ALIASES).flatMap(([sourceKey, displayKeys]) => {
+          const value = typeof rawBalances[sourceKey] === 'number' ? rawBalances[sourceKey] : 0
+          return displayKeys.map(({ key, max }) => [key, typeof max === 'number' ? Math.min(value, max) : value])
+        })
+      )
 
-      const PAID_KEYS = ['pto', 'sick', 'personal', 'bereavement', 'paternity']
-      const MEDICAL_KEYS = ['sick', 'fmla']
+      const PAID_KEYS = ['pto', 'sick', 'personal', 'bereavement', 'paternity', 'compoff']
+      const MEDICAL_KEYS = ['sick', 'fmla', 'intermittent', 'emergencyleave']
       const FAMILY_KEYS = ['maternity', 'paternity', 'bereavement', 'fmla']
 
       if (filter === 'paid') {
@@ -128,8 +160,18 @@ export const leaveMcpTools = {
       const end = endDate ?? startDate
       const { hasOverlap, conflicts } = await findOverlappingLeaves(employeeId, startDate, end)
       const holidayName = COMPANY_HOLIDAYS[startDate]
+      const breakdown = countBusinessDays(startDate, end)
+      const isRange = end !== startDate
 
-      if (holidayName) {
+      if (isRange && breakdown.businessDays === 0) {
+        return {
+          available: false,
+          reason: 'All selected dates fall on weekends or company holidays - no leave days needed. Choose different dates.',
+          breakdown,
+        }
+      }
+
+      if (!isRange && holidayName) {
         return {
           available: false,
           reason: `${startDate} is a company holiday (${holidayName}) — you are already off!`,
@@ -139,7 +181,7 @@ export const leaveMcpTools = {
       }
 
       const dow = new Date(startDate + 'T00:00:00').getDay()
-      if (dow === 0 || dow === 6) {
+      if (!isRange && (dow === 0 || dow === 6)) {
         return {
           available: false,
           reason: `${startDate} is a ${dow === 0 ? 'Sunday' : 'Saturday'} — no leave needed.`,
@@ -153,6 +195,28 @@ export const leaveMcpTools = {
           available: false,
           reason: `You already have leave on that date: ${list}. Cancel the existing one first or pick a different date.`,
           conflicts,
+        }
+      }
+
+      if (isRange) {
+        const warnings: string[] = []
+        if (dow === 0 || dow === 6) {
+          warnings.push(`Range starts on a ${dow === 0 ? 'Sunday' : 'Saturday'}`)
+        } else if (holidayName) {
+          warnings.push(`Range starts on a company holiday (${holidayName})`)
+        }
+        if (breakdown.weekendDays > 0) {
+          warnings.push(`${breakdown.weekendDays} weekend day${breakdown.weekendDays > 1 ? 's' : ''} excluded`)
+        }
+        if (breakdown.holidays.length > 0) {
+          warnings.push(`${breakdown.holidays.length} company holiday${breakdown.holidays.length > 1 ? 's' : ''} excluded: ${breakdown.holidays.map(h => `${h.name} (${h.date})`).join(', ')}`)
+        }
+
+        return {
+          available: true,
+          reason: 'Date range is available.',
+          breakdown,
+          warnings: warnings.length > 0 ? warnings : undefined,
         }
       }
 
@@ -173,7 +237,7 @@ export const leaveMcpTools = {
       const snap = await db.collection('users').doc(employeeId).get()
       if (!snap.exists) return { eligible: false, reason: 'Employee not found' }
       const data = snap.data()!
-      const balances = data.balances ?? {}
+      const balances = normalizeBalances(data.balances)
 
       const balanceKey: Record<LeaveType, string> = {
         PTO: 'pto',
@@ -211,7 +275,25 @@ export const leaveMcpTools = {
       }
 
       // Overlap check — prevent duplicate leaves on same dates
-      const endDate = new Date(new Date(startDate).getTime() + (days - 1) * 86400000).toISOString().split('T')[0]
+      if (leaveType === 'Maternity' && data.gender !== 'female') {
+        return {
+          eligible: false,
+          reason: 'Maternity leave is only available for female employees.',
+          available,
+          requested: days,
+        }
+      }
+
+      if (leaveType === 'Paternity' && data.gender !== 'male') {
+        return {
+          eligible: false,
+          reason: 'Paternity leave is only available for male employees.',
+          available,
+          requested: days,
+        }
+      }
+
+      const endDate = toLocalISODate(new Date(new Date(startDate).getTime() + (days - 1) * 86400000))
       const { hasOverlap, conflicts } = await findOverlappingLeaves(employeeId, startDate, endDate)
       if (hasOverlap) {
         const conflictList = conflicts.map(c =>
@@ -317,7 +399,7 @@ export const leaveMcpTools = {
       const userSnap = await db.collection('users').doc(employeeId).get()
       if (!userSnap.exists) return { error: 'Employee not found' }
       const user = userSnap.data()!
-      const today = new Date().toISOString().split('T')[0]
+      const today = toLocalISODate(new Date())
       const isRetroactive = startDate < today
 
       const breakdown = countBusinessDays(startDate, endDate)
@@ -586,7 +668,7 @@ export const leaveMcpTools = {
     }),
     execute: async ({ employeeId, department }) => {
       const db = getAdminDb()
-      const today = new Date().toISOString().split('T')[0]
+      const today = toLocalISODate(new Date())
 
       const snap = await db.collection('cases')
         .where('status', '==', 'approved')
@@ -634,7 +716,7 @@ export const leaveMcpTools = {
     execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired }) => {
       const db = getAdminDb()
       const snap = await db.collection('users').doc(employeeId).get()
-      const balances = snap.exists ? (snap.data()!.balances ?? {}) : {}
+      const balances = snap.exists ? normalizeBalances(snap.data()!.balances) : EMPTY_BALANCES
 
       const balanceKeyMap: Record<string, string> = {
         PTO: 'pto', Sick: 'sick', Personal: 'personal', Bereavement: 'bereavement',
@@ -679,7 +761,7 @@ export const leaveMcpTools = {
 
       while (counted < businessDays) {
         const dow = current.getDay()
-        const iso = current.toISOString().split('T')[0]
+        const iso = toLocalISODate(current)
         const holidayName = COMPANY_HOLIDAYS[iso]
 
         if (dow === 0 || dow === 6) {
@@ -693,7 +775,7 @@ export const leaveMcpTools = {
         current.setDate(current.getDate() + 1)
       }
 
-      const endDate = current.toISOString().split('T')[0]
+      const endDate = toLocalISODate(current)
       const calendarDays = Math.round((current.getTime() - new Date(startDate + 'T00:00:00').getTime()) / 86400000) + 1
 
       return {
@@ -717,7 +799,7 @@ export const leaveMcpTools = {
     execute: async ({ employeeId, suggestedTypes }) => {
       const db = getAdminDb()
       const snap = await db.collection('users').doc(employeeId).get()
-      const balances = snap.exists ? (snap.data()!.balances ?? {}) : {}
+      const balances = snap.exists ? normalizeBalances(snap.data()!.balances) : EMPTY_BALANCES
 
       const balanceKeyMap: Record<string, string> = {
         PTO: 'pto', Sick: 'sick', Personal: 'personal', Bereavement: 'bereavement',

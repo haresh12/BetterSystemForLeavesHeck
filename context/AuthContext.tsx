@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase/client'
-import type { UserDoc, LeaveBalances } from '@/lib/firebase/types'
+import type { UserDoc, LeaveBalances, EmployeeGender } from '@/lib/firebase/types'
 
 interface AuthContextValue {
   user: FirebaseUser | null
@@ -27,6 +27,7 @@ export interface SignUpData {
   email: string
   password: string
   role: 'employee' | 'admin'
+  gender?: EmployeeGender
   department: string
   jobTitle: string
   tenureYears: number
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: data.name,
       email: data.email,
       role: data.role,
+      ...(data.role === 'employee' && { gender: data.gender }),
       department: data.department,
       jobTitle: data.jobTitle,
       tenureYears: data.tenureYears,

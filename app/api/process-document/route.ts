@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import sharp from 'sharp'
 import { cookies } from 'next/headers'
-import { getAdminAuth, getAdminStorage } from '@/lib/firebase/admin'
+import { getAdminAuth, getAdminDb, getAdminStorage } from '@/lib/firebase/admin'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -17,6 +17,7 @@ const LEAVE_RULES: Record<string, {
   Sick: {
     documentLabel: 'Medical Certificate',
     checks: [
+      { key: 'patientName', label: 'Patient name',        rule: 'Patient name on the document must match the employee profile name' },
       { key: 'isOfficial',  label: 'Official letterhead', rule: 'Must be on hospital/clinic letterhead or an official medical form — NOT a personal letter' },
       { key: 'provider',    label: 'Doctor identified',   rule: "Doctor's full name must be clearly visible" },
       { key: 'authorized',  label: 'Medical signature',   rule: "Doctor's handwritten signature OR official medical stamp must be present" },
@@ -102,6 +103,7 @@ ${ruleList}
 
 ## OUTPUT — return ONLY valid JSON, no prose:
 {
+  "patientName": string | null,
   "doctorName": string | null,
   "hospital": string | null,
   "recommendedRestStart": "YYYY-MM-DD" | null,
@@ -125,6 +127,73 @@ Rules:
 - confidenceScore: 0.0–1.0 based on image clarity and completeness
 - failureReasons: user-friendly sentences for each failed check only
 - invalidReason: single most critical failure, or null if valid`
+}
+
+function normalizeName(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/\b(mr|mrs|ms|miss|dr|doctor|patient)\b/g, ' ')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function namesMatch(expectedName: string, patientName: string): boolean {
+  const expectedTokens = normalizeName(expectedName)
+  const patientTokens = normalizeName(patientName)
+
+  if (expectedTokens.length === 0 || patientTokens.length === 0) return false
+  if (expectedTokens.join(' ') === patientTokens.join(' ')) return true
+
+  if (expectedTokens.length === 1 || patientTokens.length === 1) {
+    return expectedTokens[0] === patientTokens[0]
+  }
+
+  const sameFirst = expectedTokens[0] === patientTokens[0]
+  const sameLast = expectedTokens[expectedTokens.length - 1] === patientTokens[patientTokens.length - 1]
+  return (sameFirst && sameLast) || expectedTokens.every((token) => patientTokens.includes(token))
+}
+
+function enforcePatientNameMatch(
+  fields: Record<string, unknown>,
+  leaveType: string,
+  employeeName: string,
+) {
+  if (leaveType !== 'Sick') return fields
+
+  const patientName = typeof fields.patientName === 'string' ? fields.patientName.trim() : ''
+  const checks = fields.checks as Record<string, { pass: boolean; note: string }> | undefined
+  const nextChecks = checks ? { ...checks } : emptyChecks(leaveType)
+  const matched = patientName ? namesMatch(employeeName, patientName) : false
+
+  nextChecks.patientName = {
+    pass: matched,
+    note: matched
+      ? `Patient name matches employee profile (${employeeName}).`
+      : patientName
+        ? `Patient name "${patientName}" does not match employee profile "${employeeName}".`
+        : 'Patient name is missing or unreadable on the document.',
+  }
+
+  fields.checks = nextChecks
+
+  if (!matched) {
+    const invalidReason = patientName
+      ? `Document patient name "${patientName}" does not match your profile name "${employeeName}".`
+      : 'Patient name is missing or unreadable on the document.'
+
+    const existingFailures = Array.isArray(fields.failureReasons)
+      ? fields.failureReasons.filter((reason): reason is string => typeof reason === 'string')
+      : []
+
+    fields.isValid = false
+    fields.invalidReason = invalidReason
+    fields.failureReasons = existingFailures.includes(invalidReason)
+      ? existingFailures
+      : [invalidReason, ...existingFailures]
+  }
+
+  return fields
 }
 
 function parseResult(raw: string, fileName: string, leaveType: string): NextResponse {
@@ -321,6 +390,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
   }
 
+  const userSnap = await getAdminDb().collection('users').doc(uid).get()
+  if (!userSnap.exists) {
+    return NextResponse.json({ error: 'User profile not found' }, { status: 403 })
+  }
+
+  const employeeName = String(userSnap.data()?.name ?? '').trim()
+  if (!employeeName) {
+    return NextResponse.json({ error: 'User profile missing name' }, { status: 403 })
+  }
+
   const { base64, fileName = 'document', leaveType = 'Sick' } = await req.json()
   console.log('[DOC] === NEW REQUEST ===', fileName, '| leaveType:', leaveType, '| base64 starts with:', base64?.slice(0, 50))
 
@@ -348,7 +427,7 @@ export async function POST(req: NextRequest) {
     console.log('[DOC] File URL:', fileUrl ?? 'UPLOAD FAILED (non-blocking)')
 
     // Inject fileUrl into the response
-    const body = await verifyResult.json()
+    const body = enforcePatientNameMatch(await verifyResult.json(), leaveType, employeeName)
     return NextResponse.json({ ...body, fileUrl })
   } catch (err: any) {
     console.error('[DOC] TOP-LEVEL ERROR:', err?.message ?? err, err?.stack?.slice(0, 300))

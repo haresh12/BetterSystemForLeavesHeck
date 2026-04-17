@@ -2,6 +2,7 @@ import type { Timestamp } from 'firebase/firestore'
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 export type UserRole = 'employee' | 'admin'
+export type EmployeeGender = 'male' | 'female'
 
 export interface LeaveBalances {
   pto: number
@@ -19,6 +20,7 @@ export interface UserDoc {
   name: string
   email: string
   role: UserRole
+  gender?: EmployeeGender
   department: string
   jobTitle: string
   tenureYears: number
@@ -78,6 +80,7 @@ export interface CaseDoc {
 
 // ─── Documents ────────────────────────────────────────────────────────────────
 export interface ExtractedFields {
+  patientName: string | null
   doctorName: string | null
   hospital: string | null
   recommendedRestStart: string | null   // ISO

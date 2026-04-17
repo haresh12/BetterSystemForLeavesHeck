@@ -19,6 +19,13 @@ export function daysBetween(start: string, end: string): number {
   return Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1
 }
 
+export function toLocalISODate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // ── Company holidays (2025-2027 coverage) ─────────────────────────────────────
 export const COMPANY_HOLIDAYS: Record<string, string> = {
   '2025-01-01': "New Year's Day",
@@ -72,7 +79,7 @@ export function countBusinessDays(startDate: string, endDate: string): DayBreakd
   while (current <= end) {
     calendarDays++
     const dow = current.getDay()
-    const iso = current.toISOString().split('T')[0]
+    const iso = toLocalISODate(current)
 
     if (dow === 0 || dow === 6) {
       weekendDays++

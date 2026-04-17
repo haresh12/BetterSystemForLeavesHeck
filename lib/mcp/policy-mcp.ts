@@ -4,6 +4,7 @@
  */
 import { tool } from 'ai'
 import { z } from 'zod'
+import { COMPANY_HOLIDAYS } from '@/lib/utils'
 
 // Company leave policies — in a real org these would be in Firestore policies collection
 // but defining them here as structured data that agents query via tools
@@ -259,6 +260,28 @@ export const policyMcpTools = {
         }))
 
       return { leaveTypes: types, total: types.length }
+    },
+  }),
+
+  get_company_holidays: tool({
+    description: 'Get the company holiday list for a given year or all configured years.',
+    inputSchema: z.object({
+      year: z.number().optional().describe('Optional year filter like 2026'),
+      includeAllYears: z.boolean().optional().default(false).describe('Set true only when the user explicitly asks for all configured years'),
+    }),
+    execute: async ({ year, includeAllYears }) => {
+      const currentYear = new Date().getFullYear()
+      const targetYear = includeAllYears ? null : (year ?? currentYear)
+      const holidays = Object.entries(COMPANY_HOLIDAYS)
+        .filter(([date]) => !targetYear || date.startsWith(`${targetYear}-`))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, name]) => ({ date, name }))
+
+      return {
+        holidays,
+        total: holidays.length,
+        year: targetYear ?? 'all',
+      }
     },
   }),
 }

@@ -9,7 +9,6 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { MessageBubble, TypingRow } from '@/components/chat/MessageBubble'
 import { ChatInput, type PendingDoc } from '@/components/chat/ChatInput'
 import { BorderBeam } from '@/components/ui/border-beam'
-import { NotificationBell } from '@/components/ui/notification-panel'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Bell, LogOut, ChevronRight,
@@ -33,6 +32,7 @@ const SECONDARY_ACTIONS = [
   { label: 'Cancel a leave',    message: 'I want to cancel a leave request' },
   { label: 'Team calendar',     message: 'Show who is out in my department' },
   { label: 'FMLA eligibility',  message: 'Am I eligible for FMLA?' },
+  { label: 'Company holidays',  message: 'Show company holidays' },
 ]
 
 const TYPING_EXAMPLES = [
@@ -111,16 +111,15 @@ function extractPlainText(message: UIMessage): string {
 
 function extractCardOutputs(message: UIMessage): Array<Record<string, unknown>> {
   return (message.parts ?? [])
-    .filter((part): part is any => {
-      const p = part as any
-      return typeof p?.type === 'string' &&
-        (p.type === 'dynamic-tool' || p.type.startsWith('tool-')) &&
-        p.state === 'output-available' &&
-        p.output != null &&
-        typeof p.output === 'object' &&
-        'ui_component' in p.output
-    })
-    .map((part) => (part as any).output as Record<string, unknown>)
+    .filter((part): part is Extract<UIMessage['parts'][number], { type: string }> => (
+      typeof part?.type === 'string' &&
+      (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) &&
+      (part as { state?: string }).state === 'output-available' &&
+      part.output != null &&
+      typeof part.output === 'object' &&
+      'ui_component' in part.output
+    ))
+    .map((part) => part.output as Record<string, unknown>)
 }
 
 type StoredDisplayMessage = {
@@ -276,7 +275,7 @@ export default function EmployeeChatPage() {
   const router = useRouter()
   const { profile, signOut } = useAuth()
   const typedText = useTypewriter(TYPING_EXAMPLES, 40, 2200)
-  const { notifications, unreadCount, markAllRead } = useNotifications(profile?.uid)
+  const { notifications, unreadCount } = useNotifications(profile?.uid)
   const [input, setInput] = useState('')
   const [pendingFile, setPendingFile] = useState<PendingDoc | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -369,6 +368,7 @@ export default function EmployeeChatPage() {
       const compact = JSON.stringify({
         isValid: r.isValid,
         fileName: pendingFile.name,
+        patientName: r.patientName ?? null,
         doctorName: r.doctorName ?? null,
         hospital: r.hospital ?? null,
         recommendedRestStart: r.recommendedRestStart ?? null,
@@ -638,7 +638,17 @@ export default function EmployeeChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <NotificationBell notifications={notifications} unreadCount={unreadCount} onMarkAllRead={markAllRead} />
+            <button className="relative h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 h-4 w-4 flex items-center justify-center text-white text-[9px] font-bold rounded-full"
+                  style={{ background: '#6366f1' }}
+                >
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
             <div className="lg:hidden">
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="text-[10px] font-bold bg-brand/15 text-brand">{initials}</AvatarFallback>

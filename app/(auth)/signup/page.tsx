@@ -39,6 +39,11 @@ const JOB_TITLES: Record<string, string[]> = {
   Executive: ['CEO', 'CTO', 'COO', 'President'],
 }
 
+const ADMIN_DEFAULTS = {
+  department: 'HR',
+  jobTitle: 'HR Manager',
+} as const
+
 export default function SignupPage() {
   const router = useRouter()
   const { signUp } = useAuth()
@@ -52,6 +57,7 @@ export default function SignupPage() {
     email: '',
     password: '',
     role: 'employee',
+    gender: 'male',
     department: '',
     jobTitle: '',
     tenureYears: 1,
@@ -177,7 +183,18 @@ export default function SignupPage() {
                   {(['employee', 'admin'] as const).map((r) => (
                     <button
                       key={r}
-                      onClick={() => updateForm('role', r)}
+                      onClick={() => {
+                        updateForm('role', r)
+                        if (r === 'admin') {
+                          updateForm('gender', undefined)
+                          updateForm('department', ADMIN_DEFAULTS.department)
+                          updateForm('jobTitle', ADMIN_DEFAULTS.jobTitle)
+                        } else {
+                          updateForm('gender', 'male')
+                          updateForm('department', '')
+                          updateForm('jobTitle', '')
+                        }
+                      }}
                       className={`p-3 rounded-lg border text-sm font-medium transition-colors text-left ${
                         form.role === r
                           ? 'border-brand bg-brand-muted text-brand'
@@ -190,17 +207,32 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label>Department</Label>
-                <Select value={form.department} onValueChange={(v) => { updateForm('department', v); updateForm('jobTitle', '') }}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                  <SelectContent>
-                    {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {form.role === 'employee' && (
+                <div className="space-y-1.5">
+                  <Label>Gender</Label>
+                  <Select value={form.gender} onValueChange={(v: 'male' | 'female') => updateForm('gender', v)}>
+                    <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-              {form.department && (
+              {form.role === 'employee' && (
+                <div className="space-y-1.5">
+                  <Label>Department</Label>
+                  <Select value={form.department} onValueChange={(v) => { updateForm('department', v); updateForm('jobTitle', '') }}>
+                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                    <SelectContent>
+                      {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {form.role === 'employee' && form.department && (
                 <div className="space-y-1.5">
                   <Label>Job title</Label>
                   <Select value={form.jobTitle} onValueChange={(v) => updateForm('jobTitle', v)}>
@@ -231,7 +263,7 @@ export default function SignupPage() {
                 <Button
                   variant="brand"
                   className="flex-1"
-                  disabled={!form.department || !form.jobTitle}
+                  disabled={form.role === 'employee' && (!form.gender || !form.department || !form.jobTitle)}
                   onClick={() => form.role === 'admin' ? setStep(3) : handleSubmit()}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

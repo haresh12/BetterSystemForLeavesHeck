@@ -10,10 +10,13 @@ interface BalanceChartProps {
 
 const CFG: Record<string, { label: string; color: string; max: number; gradient: string }> = {
   pto:         { label: 'PTO',         color: '#818cf8', max: 15, gradient: 'linear-gradient(90deg, #818cf8, #6366f1)' },
+  compoff:     { label: 'Comp Off',    color: '#22c55e', max: 15, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' },
   sick:        { label: 'Sick',        color: '#fbbf24', max: 10, gradient: 'linear-gradient(90deg, #fbbf24, #f59e0b)' },
+  emergencyleave: { label: 'Emergency Leave', color: '#fb7185', max: 10, gradient: 'linear-gradient(90deg, #fb7185, #f43f5e)' },
   personal:    { label: 'Personal',    color: '#34d399', max: 5,  gradient: 'linear-gradient(90deg, #34d399, #10b981)' },
   bereavement: { label: 'Bereavement', color: '#c084fc', max: 10, gradient: 'linear-gradient(90deg, #c084fc, #a855f7)' },
   fmla:        { label: 'FMLA',        color: '#f87171', max: 60, gradient: 'linear-gradient(90deg, #f87171, #ef4444)' },
+  intermittent:{ label: 'Intermittent', color: '#fb923c', max: 60, gradient: 'linear-gradient(90deg, #fb923c, #ea580c)' },
   maternity:   { label: 'Maternity',   color: '#f472b6', max: 84, gradient: 'linear-gradient(90deg, #f472b6, #ec4899)' },
   paternity:   { label: 'Paternity',   color: '#60a5fa', max: 10, gradient: 'linear-gradient(90deg, #60a5fa, #3b82f6)' },
   unpaid:      { label: 'Unpaid',      color: '#94a3b8', max: 30, gradient: 'linear-gradient(90deg, #94a3b8, #64748b)' },
@@ -24,8 +27,8 @@ export function BalanceChart({ employeeName, balances }: BalanceChartProps) {
 
   // Sort by daily-use importance, not by highest number
   const SORT_ORDER: Record<string, number> = {
-    pto: 1, sick: 2, personal: 3, bereavement: 4, paternity: 5,
-    maternity: 6, fmla: 7, unpaid: 8,
+    pto: 1, compoff: 2, sick: 3, emergencyleave: 4, personal: 5, bereavement: 6, paternity: 7,
+    maternity: 8, fmla: 9, intermittent: 10, unpaid: 11,
   }
   const entries = Object.entries(balances)
     .filter(([k, v]) => typeof v === 'number' && CFG[k])
@@ -75,8 +78,15 @@ export function BalanceChart({ employeeName, balances }: BalanceChartProps) {
         </div>
       </div>
 
-      {/* Rows */}
-      <div style={{ padding: '16px 20px' }}>
+      {/* Tiles */}
+      <div
+        style={{
+          padding: '16px 20px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 10,
+        }}
+      >
         {entries.map(([key, rawDays], i) => {
           const days = rawDays as number
           const c = CFG[key]
@@ -94,35 +104,36 @@ export function BalanceChart({ employeeName, balances }: BalanceChartProps) {
               onMouseEnter={() => setHovered(key)}
               onMouseLeave={() => setHovered(null)}
               style={{
-                padding: '10px 12px',
-                marginBottom: 4,
+                padding: '12px',
                 borderRadius: 12,
                 cursor: 'default',
                 transition: 'background 0.15s, box-shadow 0.15s, transform 0.15s',
                 background: isActive ? `${c.color}08` : 'transparent',
                 boxShadow: isActive ? `0 0 0 1px ${c.color}20, 0 4px 12px ${c.color}12` : 'none',
                 transform: isActive ? 'scale(1.01)' : 'scale(1)',
+                border: `1px solid ${isActive ? `${c.color}25` : '#eef2f7'}`,
               }}
             >
               {/* Label row */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <div
                     style={{
-                      height: 14,
-                      width: 14,
+                      height: 12,
+                      width: 12,
                       borderRadius: 4,
                       background: c.color,
                       boxShadow: isActive ? `0 2px 10px ${c.color}60` : `0 2px 6px ${c.color}35`,
                       transition: 'box-shadow 0.15s',
+                      flexShrink: 0,
                     }}
                   />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{c.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2 }}>{c.label}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, flexShrink: 0 }}>
                   <span
                     style={{
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: 900,
                       fontVariantNumeric: 'tabular-nums',
                       color: isEmpty ? '#cbd5e1' : isLow ? '#ef4444' : c.color,
@@ -130,20 +141,7 @@ export function BalanceChart({ employeeName, balances }: BalanceChartProps) {
                   >
                     {days}
                   </span>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>/ {c.max}d</span>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      marginLeft: 4,
-                      padding: '2px 7px',
-                      borderRadius: 99,
-                      background: isEmpty ? '#f1f5f9' : isLow ? '#fef2f2' : `${c.color}15`,
-                      color: isEmpty ? '#94a3b8' : isLow ? '#ef4444' : c.color,
-                    }}
-                  >
-                    {pct}%
-                  </span>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>/ {c.max}d</span>
                 </div>
               </div>
 
@@ -194,6 +192,22 @@ export function BalanceChart({ employeeName, balances }: BalanceChartProps) {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              <div style={{ paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700 }}>{pct}%</span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 7px',
+                    borderRadius: 99,
+                    background: isEmpty ? '#f1f5f9' : isLow ? '#fef2f2' : `${c.color}15`,
+                    color: isEmpty ? '#94a3b8' : isLow ? '#ef4444' : c.color,
+                  }}
+                >
+                  {isEmpty ? 'Empty' : isLow ? 'Low' : 'Available'}
+                </span>
+              </div>
             </motion.div>
           )
         })}

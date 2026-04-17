@@ -36,6 +36,7 @@ For a VALID medical certificate you need ALL of:
 
 Output ONLY a JSON object with these exact fields:
 {
+  "patientName": string | null,
   "doctorName": string | null,
   "hospital": string | null,
   "recommendedRestStart": "YYYY-MM-DD" | null,
@@ -74,7 +75,7 @@ Output ONLY a JSON object with these exact fields:
         response_format: { type: 'json_object' },
       })
 
-      let fields: any = {}
+      let fields: Record<string, unknown> = {}
       try {
         fields = JSON.parse(response.choices[0].message.content ?? '{}')
       } catch {
@@ -86,7 +87,7 @@ Output ONLY a JSON object with these exact fields:
       }
 
       // Additional validation: if confidence is low, mark invalid
-      if (fields.confidenceScore < 0.5) {
+      if (typeof fields.confidenceScore === 'number' && fields.confidenceScore < 0.5) {
         fields.isValid = false
         fields.invalidReason = fields.invalidReason ?? 'Image quality too low to verify all required fields. Please upload a clearer photo.'
       }
@@ -106,7 +107,8 @@ Output ONLY a JSON object with these exact fields:
       employeeId: z.string(),
       fileName: z.string(),
       fileUrl: z.string().nullable().optional().describe('Public URL of the uploaded document in Firebase Storage'),
-      extractedFields: z.object({
+        extractedFields: z.object({
+        patientName: z.string().nullable(),
         doctorName: z.string().nullable(),
         hospital: z.string().nullable(),
         recommendedRestStart: z.string().nullable(),
@@ -177,8 +179,6 @@ Output ONLY a JSON object with these exact fields:
         caseId,
         hasDocument: true,
         status: docData.status,
-        fileName: docData.fileName ?? null,
-        fileUrl: docData.fileUrl ?? null,
         extractedFields: docData.extractedFields,
         uploadedAt: docData.uploadedAt?.toDate?.()?.toISOString() ?? null,
       }
@@ -193,26 +193,16 @@ Output ONLY a JSON object with these exact fields:
     execute: async ({ caseId }) => {
       const db = getAdminDb()
       const snap = await db.collection('documents').where('caseId', '==', caseId).get()
-
-      if (snap.empty) {
-        return { caseId, documents: [], total: 0, message: 'No documents uploaded for this case.' }
-      }
-
+      if (snap.empty) return { caseId, documents: [], total: 0, message: 'No documents uploaded for this case.' }
       const docs = snap.docs.map((d) => {
         const data = d.data()
         return {
-          documentId: d.id,
-          fileName: data.fileName ?? 'unknown',
-          fileUrl: data.fileUrl ?? null,
-          status: data.status,
-          confidenceScore: data.extractedFields?.confidenceScore ?? null,
-          doctorName: data.extractedFields?.doctorName ?? null,
-          hospital: data.extractedFields?.hospital ?? null,
-          isValid: data.extractedFields?.isValid ?? false,
-          uploadedAt: data.uploadedAt?.toDate?.()?.toISOString() ?? null,
+          documentId: d.id, fileName: data.fileName ?? 'unknown', fileUrl: data.fileUrl ?? null,
+          status: data.status, confidenceScore: data.extractedFields?.confidenceScore ?? null,
+          doctorName: data.extractedFields?.doctorName ?? null, hospital: data.extractedFields?.hospital ?? null,
+          isValid: data.extractedFields?.isValid ?? false, uploadedAt: data.uploadedAt?.toDate?.()?.toISOString() ?? null,
         }
       })
-
       return { caseId, documents: docs, total: docs.length }
     },
   }),
