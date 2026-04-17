@@ -155,11 +155,12 @@ export const casesMcpTools = {
         }],
       })
 
+      const halfLabel = c.isHalfDay ? ` (half day — ${c.halfDayPeriod ?? 'morning'})` : ''
       await db.collection('notifications').add({
         targetUserId: c.employeeId,
         type: 'case_approved',
         caseId,
-        message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) has been approved by ${adminName}. ${note ? note : 'Enjoy your time off!'}`,
+        message: `Your ${c.leaveType} leave${halfLabel} (${c.startDate}${c.startDate !== c.endDate ? ` → ${c.endDate}` : ''}) has been approved by ${adminName}. ${note ? note : 'Enjoy your time off!'}`,
         read: false,
         dismissed: false,
         createdAt: now,
@@ -221,11 +222,12 @@ export const casesMcpTools = {
               timestamp: new Date().toISOString(),
             }],
           })
+          const bHalf = c.isHalfDay ? ' (half day)' : ''
           await db.collection('notifications').add({
             targetUserId: c.employeeId,
             type: 'case_approved',
             caseId,
-            message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) has been approved by ${adminName}. Enjoy your time off!`,
+            message: `Your ${c.leaveType} leave${bHalf} (${c.startDate}${c.startDate !== c.endDate ? ` → ${c.endDate}` : ''}) has been approved by ${adminName}. Enjoy your time off!`,
             read: false,
             dismissed: false,
             createdAt: now,
@@ -289,7 +291,8 @@ export const casesMcpTools = {
           }
         }
 
-        await db.collection('notifications').add({ targetUserId: c.employeeId, type: 'case_rejected', caseId, message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) was not approved by ${adminName}. Reason: ${reason}`, read: false, dismissed: false, createdAt: now })
+        const brHalf = c.isHalfDay ? ' (half day)' : ''
+        await db.collection('notifications').add({ targetUserId: c.employeeId, type: 'case_rejected', caseId, message: `Your ${c.leaveType} leave${brHalf} (${c.startDate}${c.startDate !== c.endDate ? ` → ${c.endDate}` : ''}) was not approved by ${adminName}. Reason: ${reason}`, read: false, dismissed: false, createdAt: now })
         results.push(`${c.employeeName}: rejected`)
       }
 
@@ -349,11 +352,12 @@ export const casesMcpTools = {
         }
       }
 
+      const halfLabelR = c.isHalfDay ? ` (half day — ${c.halfDayPeriod ?? 'morning'})` : ''
       await db.collection('notifications').add({
         targetUserId: c.employeeId,
         type: 'case_rejected',
         caseId,
-        message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) was not approved by ${adminName}. Reason: ${reason}`,
+        message: `Your ${c.leaveType} leave${halfLabelR} (${c.startDate}${c.startDate !== c.endDate ? ` → ${c.endDate}` : ''}) was not approved by ${adminName}. Reason: ${reason}`,
         read: false,
         dismissed: false,
         createdAt: now,

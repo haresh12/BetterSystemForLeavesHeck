@@ -97,7 +97,12 @@ export function CaseTableAdmin({ cases, onCaseClick, onApprove, onFilterByType, 
                   >
                     {c.leaveType}
                   </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>{c.days}d</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>{c.isHalfDay ? '½d' : `${c.days}d`}</span>
+                  {c.isHalfDay && c.halfDayPeriod && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#f0f4ff', color: '#6366f1' }}>
+                      {c.halfDayPeriod === 'morning' ? 'AM' : 'PM'}
+                    </span>
+                  )}
                   {urgent && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#fef2f2', color: '#dc2626' }}>URGENT</span>}
                   {needsDoc && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#fef9c3', color: '#a16207' }}>DOCS</span>}
                   {c.priority === 'high' && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#fee2e2', color: '#dc2626' }}>HIGH</span>}

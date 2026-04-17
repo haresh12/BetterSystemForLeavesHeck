@@ -20,6 +20,8 @@ export interface CaseReview {
   department: string
   leaveType: string
   days: number
+  isHalfDay?: boolean
+  halfDayPeriod?: string
   startDate: string
   endDate: string
   reason: string
@@ -182,6 +184,7 @@ export async function POST(req: NextRequest) {
       department: c.employeeDepartment,
       leaveType: c.leaveType,
       days: c.days,
+      ...(c.isHalfDay ? { isHalfDay: true, halfDayPeriod: c.halfDayPeriod } : {}),
       startDate: c.startDate,
       endDate: c.endDate,
       reason: c.reason,

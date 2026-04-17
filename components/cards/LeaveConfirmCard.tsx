@@ -16,6 +16,8 @@ interface LeaveConfirmCardProps {
   weekendDays?: number
   holidays?: Array<{ date: string; name: string }>
   reviewerName?: string
+  isHalfDay?: boolean
+  halfDayPeriod?: 'morning' | 'afternoon'
   message?: string
 }
 
@@ -47,7 +49,7 @@ function fmtFull(iso: string) {
 export function LeaveConfirmCard({
   leaveType, startDate, endDate, days, deductedDays, reason,
   certificateRequired, currentBalance, remainingAfter,
-  weekendDays, holidays, reviewerName,
+  weekendDays, holidays, reviewerName, isHalfDay, halfDayPeriod,
 }: LeaveConfirmCardProps) {
   const actualDeducted = deductedDays ?? days
   const cfg = TYPE_CONFIG[leaveType] ?? TYPE_CONFIG.PTO
@@ -83,13 +85,18 @@ export function LeaveConfirmCard({
         {/* Big day count */}
         <div className="flex items-end gap-3 mb-4">
           <span className="text-6xl font-black leading-none tabular-nums" style={{ color: cfg.accent }}>
-            {actualDeducted}
+            {isHalfDay ? '½' : actualDeducted}
           </span>
           <div className="pb-1">
             <p className="text-lg font-bold leading-none" style={{ color: cfg.accent }}>
-              day{actualDeducted !== 1 ? 's' : ''} deducted
+              {isHalfDay ? 'day deducted' : `day${actualDeducted !== 1 ? 's' : ''} deducted`}
             </p>
-            {days !== actualDeducted && (
+            {isHalfDay && halfDayPeriod && (
+              <p className="text-xs font-semibold mt-0.5" style={{ color: cfg.accent, opacity: 0.8 }}>
+                {halfDayPeriod === 'morning' ? 'Morning — first half' : 'Afternoon — second half'}
+              </p>
+            )}
+            {!isHalfDay && days !== actualDeducted && (
               <p className="text-xs text-muted-foreground mt-0.5">{days} calendar days total</p>
             )}
           </div>
@@ -125,7 +132,11 @@ export function LeaveConfirmCard({
           {isSameDay ? (
             <div>
               <p className="text-sm font-bold">{fmtFull(startDate)}</p>
-              <p className="text-xs text-muted-foreground">Single day</p>
+              <p className="text-xs text-muted-foreground">
+                {isHalfDay
+                  ? `Half day — ${halfDayPeriod === 'morning' ? 'morning' : 'afternoon'}`
+                  : 'Single day'}
+              </p>
             </div>
           ) : (
             <div className="flex items-center gap-3 w-full">

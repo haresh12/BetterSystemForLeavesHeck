@@ -19,6 +19,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 5,
     noticePeriodDays: 5,
     eligibilityMonths: 3,
+    halfDayAllowed: true,
     isActive: true,
   },
   Sick: {
@@ -31,6 +32,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 0,
     eligibilityMonths: 0,
+    halfDayAllowed: true,
     isActive: true,
   },
   FMLA: {
@@ -43,6 +45,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 30,
     eligibilityMonths: 12,
+    halfDayAllowed: false,
     isActive: true,
   },
   Maternity: {
@@ -55,6 +58,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 60,
     eligibilityMonths: 12,
+    halfDayAllowed: false,
     isActive: true,
   },
   Paternity: {
@@ -67,6 +71,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 30,
     eligibilityMonths: 12,
+    halfDayAllowed: false,
     isActive: true,
   },
   Bereavement: {
@@ -79,6 +84,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 0,
     eligibilityMonths: 0,
+    halfDayAllowed: true,
     isActive: true,
   },
   Personal: {
@@ -91,6 +97,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 3,
     eligibilityMonths: 0,
+    halfDayAllowed: true,
     isActive: true,
   },
   Intermittent: {
@@ -103,6 +110,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 30,
     eligibilityMonths: 12,
+    halfDayAllowed: false,
     isActive: true,
   },
   Unpaid: {
@@ -115,6 +123,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 14,
     eligibilityMonths: 6,
+    halfDayAllowed: true,
     isActive: true,
   },
   CompOff: {
@@ -127,6 +136,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 5,
     noticePeriodDays: 1,
     eligibilityMonths: 0,
+    halfDayAllowed: true,
     isActive: true,
   },
   EmergencyLeave: {
@@ -139,6 +149,7 @@ const LEAVE_POLICIES = {
     maxCarryForwardDays: 0,
     noticePeriodDays: 0,
     eligibilityMonths: 0,
+    halfDayAllowed: true,
     isActive: true,
   },
 }
@@ -160,12 +171,18 @@ export const policyMcpTools = {
     description: 'Determine whether a medical certificate or supporting document is required for a given leave type and duration.',
     inputSchema: z.object({
       leaveType: z.enum(['PTO', 'Sick', 'FMLA', 'Maternity', 'Paternity', 'Bereavement', 'Personal', 'Intermittent', 'Unpaid', 'CompOff', 'EmergencyLeave']),
-      days: z.number().describe('Number of leave days'),
+      days: z.number().describe('Number of leave days (use 0.5 for half-day)'),
       startDayOfWeek: z.number().optional().describe('0=Sunday, 1=Monday ... 6=Saturday — used for Monday/Friday flag checks'),
+      isHalfDay: z.boolean().optional().default(false).describe('True for half-day leave requests'),
     }),
-    execute: async ({ leaveType, days, startDayOfWeek }) => {
+    execute: async ({ leaveType, days, startDayOfWeek, isHalfDay }) => {
       const policy = LEAVE_POLICIES[leaveType]
       if (!policy) return { required: false, reason: 'Unknown leave type' }
+
+      // Half-day leaves never require certificates (duration-based rules don't apply)
+      if (isHalfDay && policy.certificateAfterDays !== 0) {
+        return { required: false, documentType: 'None', reason: `Half-day ${policy.displayName} does not require documentation.` }
+      }
 
       let required = false
       let documentType = 'None'
@@ -257,6 +274,7 @@ export const policyMcpTools = {
           requiresCertificate: policy.requiresCertificate,
           noticePeriodDays: policy.noticePeriodDays,
           eligibilityMonths: policy.eligibilityMonths,
+          halfDayAllowed: policy.halfDayAllowed,
         }))
 
       return { leaveTypes: types, total: types.length }

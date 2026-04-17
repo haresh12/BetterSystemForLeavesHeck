@@ -119,8 +119,13 @@ export function CaseTable({ cases, total, viewType = 'default', viewLabel }: Cas
                               background: `${typeColor}15`, color: typeColor,
                             }}
                           >
-                            {c.days}d
+                            {c.isHalfDay ? '½d' : `${c.days}d`}
                           </span>
+                          {c.isHalfDay && c.halfDayPeriod && (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>
+                              {c.halfDayPeriod === 'morning' ? 'AM' : 'PM'}
+                            </span>
+                          )}
                         </div>
 
                         {/* Date */}

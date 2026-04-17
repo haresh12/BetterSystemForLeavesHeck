@@ -13,6 +13,8 @@ interface CaseStatusCardProps {
   docStatus?: string
   reason?: string
   reviewerName?: string
+  isHalfDay?: boolean
+  halfDayPeriod?: 'morning' | 'afternoon'
   message?: string
 }
 
@@ -52,7 +54,7 @@ const STATE_CFG = {
 }
 
 export function CaseStatusCard({
-  caseId, leaveType, startDate, endDate, days, status, docStatus, reason, reviewerName,
+  caseId, leaveType, startDate, endDate, days, status, docStatus, reason, reviewerName, isHalfDay, halfDayPeriod,
 }: CaseStatusCardProps) {
   const color = TYPE_COLOR[leaveType] ?? '#6366f1'
   const isSameDay = startDate === endDate
@@ -99,8 +101,8 @@ export function CaseStatusCard({
             <span style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e' }}>{leaveType}</span>
           </div>
           <div style={{ textAlign: 'right' as const }}>
-            <span style={{ fontSize: 28, fontWeight: 900, color, lineHeight: 1 }}>{days}</span>
-            <span style={{ fontSize: 14, fontWeight: 600, color, marginLeft: 2 }}>{days !== 1 ? 'days' : 'day'}</span>
+            <span style={{ fontSize: 28, fontWeight: 900, color, lineHeight: 1 }}>{isHalfDay ? '½' : days}</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color, marginLeft: 2 }}>{isHalfDay ? 'day' : days !== 1 ? 'days' : 'day'}</span>
           </div>
         </div>
 
@@ -113,9 +115,16 @@ export function CaseStatusCard({
           }}
         >
           <Calendar className="h-3.5 w-3.5" style={{ color }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#1a1a2e' }}>
-            {isSameDay ? fmtFull(startDate) : `${fmtDate(startDate)} → ${fmtDate(endDate)}`}
-          </span>
+          <div>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1a1a2e' }}>
+              {isSameDay ? fmtFull(startDate) : `${fmtDate(startDate)} → ${fmtDate(endDate)}`}
+            </span>
+            {isHalfDay && halfDayPeriod && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginLeft: 6 }}>
+                ({halfDayPeriod === 'morning' ? 'Morning' : 'Afternoon'})
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Reason */}

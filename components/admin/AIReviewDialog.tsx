@@ -10,6 +10,8 @@ interface CaseReview {
   department: string
   leaveType: string
   days: number
+  isHalfDay?: boolean
+  halfDayPeriod?: string
   startDate: string
   endDate: string
   reason: string
@@ -195,7 +197,7 @@ export function AIReviewDialog({ open, onClose, caseIds, tabName, onAction }: AI
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 14, fontWeight: 800, color: '#1a1a2e', textDecoration: action === 'rejected' ? 'line-through' : 'none' }}>{review.employeeName}</span>
                         <span style={{ fontSize: 11, fontWeight: 700, color: tc }}>{review.leaveType}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>{review.days}d</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>{review.isHalfDay ? '½d' : `${review.days}d`}</span>
                         {isActed && <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: action === 'approved' ? '#dcfce7' : '#fee2e2', color: action === 'approved' ? '#16a34a' : '#dc2626' }}>{action.toUpperCase()}</span>}
                       </div>
                       <p style={{ fontSize: 11, color: '#64748b' }}>{fmtDate(review.startDate)} - {fmtDate(review.endDate)} · {review.department} · {review.reason}</p>

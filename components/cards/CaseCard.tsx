@@ -74,7 +74,14 @@ export function CaseCard({ case: c, documents, auditLogs, message }: CaseCardPro
             <Calendar className="h-3.5 w-3.5" />
             <span>
               {formatDate(c.startDate)} — {formatDate(c.endDate)}{' '}
-              <span className="font-medium text-foreground">({c.days} day{c.days !== 1 ? 's' : ''})</span>
+              <span className="font-medium text-foreground">
+                ({c.isHalfDay ? '½ day' : `${c.days} day${c.days !== 1 ? 's' : ''}`})
+              </span>
+              {c.isHalfDay && c.halfDayPeriod && (
+                <span className="text-xs ml-1 text-muted-foreground">
+                  ({c.halfDayPeriod === 'morning' ? 'Morning' : 'Afternoon'})
+                </span>
+              )}
             </span>
           </div>
         </div>

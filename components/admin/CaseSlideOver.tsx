@@ -102,7 +102,7 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
             </div>
             <div>
               <p style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e' }}>{c.employeeName}</p>
-              <p style={{ fontSize: 12, color: '#64748b' }}>#{c.caseId.slice(-6).toUpperCase()} · {c.leaveType} · {c.days}d</p>
+              <p style={{ fontSize: 12, color: '#64748b' }}>#{c.caseId.slice(-6).toUpperCase()} · {c.leaveType} · {c.isHalfDay ? '½d' : `${c.days}d`}{c.isHalfDay && c.halfDayPeriod ? ` (${c.halfDayPeriod === 'morning' ? 'AM' : 'PM'})` : ''}</p>
             </div>
           </div>
           <button onClick={onClose} style={{ height: 32, width: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', background: '#f1f5f9', border: 'none', cursor: 'pointer' }}>
@@ -265,7 +265,7 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
                 { label: 'TYPE', value: c.leaveType, color: typeColor },
-                { label: 'DAYS', value: `${c.days} day${c.days > 1 ? 's' : ''}`, color: '#1a1a2e' },
+                { label: 'DAYS', value: c.isHalfDay ? '½ day' + (c.halfDayPeriod ? ` (${c.halfDayPeriod})` : '') : `${c.days} day${c.days > 1 ? 's' : ''}`, color: '#1a1a2e' },
                 { label: 'START', value: formatDate(c.startDate), color: '#1a1a2e' },
                 { label: 'END', value: formatDate(c.endDate), color: '#1a1a2e' },
               ].map(item => (

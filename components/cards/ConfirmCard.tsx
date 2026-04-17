@@ -62,7 +62,7 @@ export function ConfirmCard({ action, candidates, count, message }: ConfirmCardP
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <span>{formatDate(c.startDate)}</span>
-                <span>{c.days}d</span>
+                <span>{c.isHalfDay ? '½d' : `${c.days}d`}</span>
                 <span className="font-mono text-xs">#{c.caseId.slice(-6).toUpperCase()}</span>
               </div>
             </div>

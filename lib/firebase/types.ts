@@ -55,6 +55,8 @@ export interface CaseNote {
   timestamp: string   // ISO
 }
 
+export type HalfDayPeriod = 'morning' | 'afternoon'
+
 export interface CaseDoc {
   caseId: string
   employeeId: string
@@ -64,12 +66,14 @@ export interface CaseDoc {
   leaveType: LeaveType
   startDate: string       // ISO
   endDate: string         // ISO
-  days: number
+  days: number            // 0.5 for half-day leaves
   reason: string
   status: CaseStatus
   priority: CasePriority
   docStatus: DocStatus
   certificateRequired: boolean
+  isHalfDay?: boolean
+  halfDayPeriod?: HalfDayPeriod   // 'morning' or 'afternoon'
   isRetroactive?: boolean
   fmlaExpiry: string | null   // ISO
   rejectionReason: string | null
@@ -161,12 +165,14 @@ export interface LeanCase {
   leaveType: LeaveType
   startDate: string
   endDate: string
-  days: number
+  days: number            // 0.5 for half-day leaves
   reason: string
   status: CaseStatus
   priority: CasePriority
   docStatus: DocStatus
   certificateRequired: boolean
+  isHalfDay?: boolean
+  halfDayPeriod?: HalfDayPeriod
   fmlaExpiry: string | null
   rejectionReason: string | null
   notes: CaseNote[]

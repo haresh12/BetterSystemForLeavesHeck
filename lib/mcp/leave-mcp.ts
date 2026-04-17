@@ -225,14 +225,16 @@ export const leaveMcpTools = {
   }),
 
   check_eligibility: tool({
-    description: 'Check if an employee is eligible to take a specific leave type and duration. Validates balance, tenure, and policy rules.',
+    description: 'Check if an employee is eligible to take a specific leave type and duration. Validates balance, tenure, and policy rules. Set isHalfDay=true for half-day leaves (0.5 day deduction).',
     inputSchema: z.object({
       employeeId: z.string(),
       leaveType: z.enum(['PTO', 'Sick', 'FMLA', 'Maternity', 'Paternity', 'Bereavement', 'Personal', 'Intermittent', 'Unpaid', 'CompOff', 'EmergencyLeave']),
-      days: z.number().describe('Number of days requested'),
+      days: z.number().describe('Number of days requested (use 0.5 for half-day)'),
       startDate: z.string().describe('ISO date string'),
+      isHalfDay: z.boolean().optional().default(false).describe('True for half-day leave requests'),
+      halfDayPeriod: z.enum(['morning', 'afternoon']).optional().describe('Required when isHalfDay is true'),
     }),
-    execute: async ({ employeeId, leaveType, days, startDate }) => {
+    execute: async ({ employeeId, leaveType, days, startDate, isHalfDay, halfDayPeriod }) => {
       const db = getAdminDb()
       const snap = await db.collection('users').doc(employeeId).get()
       if (!snap.exists) return { eligible: false, reason: 'Employee not found' }
@@ -290,6 +292,58 @@ export const leaveMcpTools = {
           reason: 'Paternity leave is only available for male employees.',
           available,
           requested: days,
+        }
+      }
+
+      // Half-day validation
+      const HALF_DAY_ALLOWED_TYPES = ['PTO', 'Sick', 'Personal', 'CompOff', 'EmergencyLeave', 'Bereavement', 'Unpaid']
+      if (isHalfDay && !HALF_DAY_ALLOWED_TYPES.includes(leaveType)) {
+        return {
+          eligible: false,
+          reason: `Half-day leave is not available for ${leaveType}. Only PTO, Sick, Personal, CompOff, Emergency, Bereavement, and Unpaid support half-day.`,
+          available,
+          requested: 0.5,
+        }
+      }
+
+      if (isHalfDay) {
+        // Half-day: single date, 0.5 day deduction
+        const { hasOverlap, conflicts } = await findOverlappingLeaves(employeeId, startDate, startDate)
+        if (hasOverlap) {
+          // Allow half-day if existing leave on same date is also half-day with different period
+          const blockingConflict = conflicts.some(c => !(c as any).isHalfDay || (c as any).halfDayPeriod === halfDayPeriod)
+          if (blockingConflict) {
+            const conflictList = conflicts.map(c =>
+              `• ${c.leaveType} (${c.startDate}, ${c.days}d) — ${c.status} [#${c.caseId.slice(-6).toUpperCase()}]`
+            ).join('\n')
+            return {
+              eligible: false,
+              reason: `You already have leave on ${startDate}:\n${conflictList}\n\nCancel the existing leave first, or choose a different date.`,
+              available,
+              requested: 0.5,
+              overlappingLeaves: conflicts,
+            }
+          }
+        }
+
+        if (leaveType !== 'Unpaid' && available < 0.5) {
+          return {
+            eligible: false,
+            reason: `Insufficient ${leaveType} balance. Available: ${available} days, requested: 0.5 day (half day).`,
+            available,
+            requested: 0.5,
+          }
+        }
+
+        return {
+          eligible: true,
+          reason: 'Eligible',
+          available,
+          requested: 0.5,
+          deductedDays: 0.5,
+          remaining: available - (leaveType !== 'Unpaid' ? 0.5 : 0),
+          isHalfDay: true,
+          halfDayPeriod,
         }
       }
 
@@ -353,7 +407,7 @@ export const leaveMcpTools = {
   }),
 
   submit_leave: tool({
-    description: 'Submit a leave request for an employee after eligibility is confirmed and employee has given explicit confirmation.',
+    description: 'Submit a leave request for an employee after eligibility is confirmed and employee has given explicit confirmation. Set isHalfDay=true and halfDayPeriod for half-day leaves.',
     inputSchema: z.object({
       employeeId: z.string(),
       leaveType: z.enum(['PTO', 'Sick', 'FMLA', 'Maternity', 'Paternity', 'Bereavement', 'Personal', 'Intermittent', 'Unpaid', 'CompOff', 'EmergencyLeave']),
@@ -364,8 +418,10 @@ export const leaveMcpTools = {
       hasDocumentUploaded: z.boolean().default(false),
       employeeDocOverride: z.boolean().optional().default(false)
         .describe('True when employee explicitly said PROCEED despite AI flagging their document as invalid. Bypasses Firestore doc gate — HR will review.'),
+      isHalfDay: z.boolean().optional().default(false).describe('True for half-day leave (0.5 day deduction)'),
+      halfDayPeriod: z.enum(['morning', 'afternoon']).optional().describe('Required when isHalfDay is true'),
     }),
-    execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired, employeeDocOverride }) => {
+    execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired, employeeDocOverride, isHalfDay, halfDayPeriod }) => {
       // Doc gate: skip entirely when employee overrode (they uploaded a doc but AI flagged it invalid)
       if (certificateRequired && !employeeDocOverride) {
         const db2 = getAdminDb()
@@ -403,8 +459,7 @@ export const leaveMcpTools = {
       const today = toLocalISODate(new Date())
       const isRetroactive = startDate < today
 
-      const breakdown = countBusinessDays(startDate, endDate)
-      const days = breakdown.businessDays
+      const days = isHalfDay ? 0.5 : countBusinessDays(startDate, endDate).businessDays
 
       // Find admin for this employee
       const adminsSnap = await db.collection('users').where('role', '==', 'admin').get()
@@ -442,6 +497,7 @@ export const leaveMcpTools = {
         priority,
         docStatus,
         certificateRequired,
+        ...(isHalfDay ? { isHalfDay: true, halfDayPeriod } : {}),
         isRetroactive,
         fmlaExpiry: leaveType === 'FMLA' || leaveType === 'Intermittent'
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
@@ -474,12 +530,14 @@ export const leaveMcpTools = {
       }
 
       // Create notification for admin
+      const daysLabel = isHalfDay ? 'half day' : `${days} day${days !== 1 ? 's' : ''}`
+      const periodLabel = isHalfDay && halfDayPeriod ? ` (${halfDayPeriod})` : ''
       if (adminId) {
         await db.collection('notifications').add({
           targetUserId: adminId,
           type: 'new_case',
           caseId: caseRef.id,
-          message: `New ${leaveType} request from ${user.name} — ${days} day${days !== 1 ? 's' : ''} (${startDate} to ${endDate})`,
+          message: `New ${leaveType} request from ${user.name} — ${daysLabel}${periodLabel} (${startDate}${startDate !== endDate ? ` to ${endDate}` : ''})`,
           read: false,
           dismissed: false,
           createdAt: now,
@@ -491,7 +549,7 @@ export const leaveMcpTools = {
         actorId: employeeId,
         actorRole: 'employee',
         action: 'case_created',
-        detail: `${leaveType} leave submitted for ${days} days`,
+        detail: `${leaveType} leave submitted for ${daysLabel}${periodLabel}`,
         timestamp: now,
       })
 
@@ -507,13 +565,14 @@ export const leaveMcpTools = {
         reason,
         isRetroactive,
         reviewerName,
+        ...(isHalfDay ? { isHalfDay: true, halfDayPeriod } : {}),
         message: `Leave submitted successfully (Case #${caseRef.id.slice(-6).toUpperCase()}).`,
       }
     },
   }),
 
   get_my_cases: tool({
-    description: 'Get leave cases for the employee. Supports status, time, date range, and recency filters. Use dateFrom/dateTo for custom ranges like "last 6 months", "this year", "Jan to March". ALWAYS show results as CaseTable card.',
+    description: 'Get leave cases for the employee. Supports status, time, date range, recency, and half-day filters. Use dateFrom/dateTo for custom ranges like "last 6 months", "this year", "Jan to March". ALWAYS show results as CaseTable card.',
     inputSchema: z.object({
       employeeId: z.string(),
       statusFilter: z.enum(['all', 'open', 'past', 'pending_docs', 'approved', 'rejected', 'cancelled', 'under_review']).optional().default('all'),
@@ -521,9 +580,11 @@ export const leaveMcpTools = {
         .describe('Quick recency filter for recent queries'),
       dateFrom: z.string().optional().describe('ISO date YYYY-MM-DD — show cases created on or after this date'),
       dateTo: z.string().optional().describe('ISO date YYYY-MM-DD — show cases created on or before this date'),
+      halfDayFilter: z.enum(['all', 'half_day_only', 'full_day_only']).optional().default('all')
+        .describe('Filter by half-day: "half_day_only" shows only half-day leaves, "full_day_only" shows only full-day leaves'),
       limit: z.number().optional().default(50),
     }),
-    execute: async ({ employeeId, statusFilter, createdInLast, dateFrom, dateTo, limit }) => {
+    execute: async ({ employeeId, statusFilter, createdInLast, dateFrom, dateTo, halfDayFilter, limit }) => {
       const db = getAdminDb()
       const snap = await db.collection('cases')
         .where('employeeId', '==', employeeId)
@@ -538,6 +599,13 @@ export const leaveMcpTools = {
         cases = cases.filter((c) => ['approved', 'rejected', 'cancelled'].includes(c.status))
       } else if (statusFilter !== 'all') {
         cases = cases.filter((c) => c.status === statusFilter)
+      }
+
+      // Half-day filter
+      if (halfDayFilter === 'half_day_only') {
+        cases = cases.filter((c) => c.isHalfDay === true)
+      } else if (halfDayFilter === 'full_day_only') {
+        cases = cases.filter((c) => !c.isHalfDay)
       }
 
       // Custom date range filter
@@ -580,7 +648,8 @@ export const leaveMcpTools = {
         : dateTo ? `Until ${dateTo}`
         : null
       const statusLabel = statusFilter === 'past' ? 'Past' : statusFilter === 'open' ? 'Active' : statusFilter !== 'all' ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : ''
-      const viewLabel = [statusLabel, timeLabel ? `(${timeLabel})` : '', 'Requests'].filter(Boolean).join(' ').trim() || 'All Requests'
+      const halfDayLabel = halfDayFilter === 'half_day_only' ? 'Half Day' : halfDayFilter === 'full_day_only' ? 'Full Day' : ''
+      const viewLabel = [halfDayLabel, statusLabel, timeLabel ? `(${timeLabel})` : '', 'Requests'].filter(Boolean).join(' ').trim() || 'All Requests'
 
       return {
         ui_component: 'CaseTable',
@@ -659,6 +728,7 @@ export const leaveMcpTools = {
         status: 'cancelled' as const,
         docStatus: c.docStatus,
         reason: c.reason,
+        ...(c.isHalfDay ? { isHalfDay: true, halfDayPeriod: c.halfDayPeriod } : {}),
         message: `Leave #${caseId.slice(-6).toUpperCase()} cancelled. Your ${c.leaveType} balance has been restored.`,
       }
     },
@@ -708,7 +778,7 @@ export const leaveMcpTools = {
   }),
 
   preview_leave_request: tool({
-    description: 'Show the employee a confirmation card with all leave details BEFORE submitting. Always call this before submit_leave. Fetches current balance so the employee can see the impact.',
+    description: 'Show the employee a confirmation card with all leave details BEFORE submitting. Always call this before submit_leave. Fetches current balance so the employee can see the impact. Set isHalfDay=true for half-day leaves.',
     inputSchema: z.object({
       employeeId: z.string(),
       leaveType: z.enum(['PTO', 'Sick', 'FMLA', 'Maternity', 'Paternity', 'Bereavement', 'Personal', 'Intermittent', 'Unpaid', 'CompOff', 'EmergencyLeave']),
@@ -716,8 +786,10 @@ export const leaveMcpTools = {
       endDate: z.string().describe('ISO date YYYY-MM-DD'),
       reason: z.string(),
       certificateRequired: z.boolean(),
+      isHalfDay: z.boolean().optional().default(false).describe('True for half-day leave (0.5 day deduction)'),
+      halfDayPeriod: z.enum(['morning', 'afternoon']).optional().describe('Required when isHalfDay is true'),
     }),
-    execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired }) => {
+    execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired, isHalfDay, halfDayPeriod }) => {
       const db = getAdminDb()
       const [snap, adminsSnap] = await Promise.all([
         db.collection('users').doc(employeeId).get(),
@@ -744,8 +816,8 @@ export const leaveMcpTools = {
       const key = balanceKeyMap[leaveType] ?? 'pto'
       const currentBalance = balances[key] ?? 0
 
-      const breakdown = countBusinessDays(startDate, endDate)
-      const deductedDays = breakdown.businessDays
+      const deductedDays = isHalfDay ? 0.5 : countBusinessDays(startDate, endDate).businessDays
+      const breakdown = isHalfDay ? null : countBusinessDays(startDate, endDate)
       const remainingAfter = Math.max(0, currentBalance - (leaveType !== 'Unpaid' ? deductedDays : 0))
 
       return {
@@ -753,15 +825,16 @@ export const leaveMcpTools = {
         leaveType,
         startDate,
         endDate,
-        days: breakdown.calendarDays,
+        days: isHalfDay ? 0.5 : (breakdown?.calendarDays ?? 1),
         deductedDays,
         reason,
         certificateRequired,
         currentBalance,
         remainingAfter,
-        weekendDays: breakdown.weekendDays,
-        holidays: breakdown.holidays,
+        weekendDays: breakdown?.weekendDays,
+        holidays: breakdown?.holidays,
         reviewerName,
+        ...(isHalfDay ? { isHalfDay: true, halfDayPeriod } : {}),
         message: 'Review your leave request below.',
       }
     },
