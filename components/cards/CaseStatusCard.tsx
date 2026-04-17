@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { CheckCircle2, XCircle, AlertTriangle, Calendar, Clock } from 'lucide-react'
+import { CheckCircle2, XCircle, AlertTriangle, Calendar, Clock, UserCheck } from 'lucide-react'
 
 interface CaseStatusCardProps {
   caseId: string
@@ -12,6 +12,7 @@ interface CaseStatusCardProps {
   status: 'open' | 'pending_docs' | 'cancelled'
   docStatus?: string
   reason?: string
+  reviewerName?: string
   message?: string
 }
 
@@ -51,7 +52,7 @@ const STATE_CFG = {
 }
 
 export function CaseStatusCard({
-  caseId, leaveType, startDate, endDate, days, status, docStatus, reason,
+  caseId, leaveType, startDate, endDate, days, status, docStatus, reason, reviewerName,
 }: CaseStatusCardProps) {
   const color = TYPE_COLOR[leaveType] ?? '#6366f1'
   const isSameDay = startDate === endDate
@@ -122,9 +123,19 @@ export function CaseStatusCard({
           <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, marginTop: 4 }}>{reason}</p>
         )}
 
+        {/* Reviewer */}
+        {reviewerName && status === 'open' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 12px', borderRadius: 10, background: '#f8fafc' }}>
+            <UserCheck className="h-3.5 w-3.5 shrink-0" style={{ color: '#6366f1' }} />
+            <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>
+              Assigned to <span style={{ fontWeight: 700, color: '#1a1a2e' }}>{reviewerName}</span>
+            </span>
+          </div>
+        )}
+
         {/* Status footer */}
         {status === 'open' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 12, color: '#64748b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#64748b' }}>
             <Clock className="h-3.5 w-3.5" />
             <span style={{ fontWeight: 500 }}>Your request is in — you'll be notified on any updates</span>
           </div>

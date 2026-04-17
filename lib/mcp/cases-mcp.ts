@@ -140,11 +140,14 @@ export const casesMcpTools = {
       const adminName = adminSnap.exists ? adminSnap.data()!.name : 'Admin'
 
       const now = FieldValue.serverTimestamp()
+      const approvalNote = note
+        ? `Approved by ${adminName} — ${note}`
+        : `Approved by ${adminName}. Your request has been reviewed and is all good — enjoy your time off!`
       await caseRef.update({
         status: 'approved',
         updatedAt: now,
         notes: [...(c.notes ?? []), {
-          text: note ? `Approved — ${note}` : 'Leave request approved',
+          text: approvalNote,
           actorId: adminId,
           actorName: adminName,
           actorRole: 'admin',
@@ -156,7 +159,7 @@ export const casesMcpTools = {
         targetUserId: c.employeeId,
         type: 'case_approved',
         caseId,
-        message: `Your ${c.leaveType} leave (${c.startDate} to ${c.endDate}) has been approved.`,
+        message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) has been approved by ${adminName}. ${note ? note : 'Enjoy your time off!'}`,
         read: false,
         dismissed: false,
         createdAt: now,
@@ -211,7 +214,7 @@ export const casesMcpTools = {
             status: 'approved',
             updatedAt: now,
             notes: [...(c.notes ?? []), {
-              text: 'Bulk approved',
+              text: `Approved by ${adminName}. Your request has been reviewed and approved — enjoy your time off!`,
               actorId: adminId,
               actorName: adminName,
               actorRole: 'admin',
@@ -222,7 +225,7 @@ export const casesMcpTools = {
             targetUserId: c.employeeId,
             type: 'case_approved',
             caseId,
-            message: `Your ${c.leaveType} leave (${c.startDate} to ${c.endDate}) has been approved.`,
+            message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) has been approved by ${adminName}. Enjoy your time off!`,
             read: false,
             dismissed: false,
             createdAt: now,
@@ -286,7 +289,7 @@ export const casesMcpTools = {
           }
         }
 
-        await db.collection('notifications').add({ targetUserId: c.employeeId, type: 'case_rejected', caseId, message: `Your ${c.leaveType} leave was rejected. Reason: ${reason}`, read: false, dismissed: false, createdAt: now })
+        await db.collection('notifications').add({ targetUserId: c.employeeId, type: 'case_rejected', caseId, message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) was not approved by ${adminName}. Reason: ${reason}`, read: false, dismissed: false, createdAt: now })
         results.push(`${c.employeeName}: rejected`)
       }
 
@@ -350,7 +353,7 @@ export const casesMcpTools = {
         targetUserId: c.employeeId,
         type: 'case_rejected',
         caseId,
-        message: `Your ${c.leaveType} leave request was rejected. Reason: ${reason}`,
+        message: `Your ${c.leaveType} leave (${c.startDate} → ${c.endDate}) was not approved by ${adminName}. Reason: ${reason}`,
         read: false,
         dismissed: false,
         createdAt: now,

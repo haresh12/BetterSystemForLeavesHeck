@@ -362,23 +362,24 @@ export const leaveMcpTools = {
       reason: z.string().describe('Employee stated reason'),
       certificateRequired: z.boolean(),
       hasDocumentUploaded: z.boolean().default(false),
+      employeeDocOverride: z.boolean().optional().default(false)
+        .describe('True when employee explicitly said PROCEED despite AI flagging their document as invalid. Bypasses Firestore doc gate — HR will review.'),
     }),
-    execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired }) => {
-      // Hard gate: if cert required, check if a REAL document exists in the chat history
-      // Don't trust the AI's hasDocumentUploaded flag — verify from Firestore
-      if (certificateRequired) {
+    execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired, employeeDocOverride }) => {
+      // Doc gate: skip entirely when employee overrode (they uploaded a doc but AI flagged it invalid)
+      if (certificateRequired && !employeeDocOverride) {
         const db2 = getAdminDb()
         const recentDocs = await db2.collection('documents')
           .where('employeeId', '==', employeeId)
           .get()
-        const validDoc = recentDocs.docs.some((d) => {
+        const acceptableDoc = recentDocs.docs.some((d) => {
           const data = d.data()
-          return data.status === 'valid' && data.extractedFields?.isValid === true
+          return data.status === 'valid' || data.status === 'employee_override'
         })
-        if (!validDoc) {
+        if (!acceptableDoc) {
           return {
             error: 'DOCUMENT_REQUIRED',
-            message: `Cannot submit ${leaveType} without a verified document. Please upload your certificate first — drop an image or PDF in the chat.`,
+            message: `Cannot submit ${leaveType} without uploading a document. Please drop an image or PDF in the chat.`,
           }
         }
       }
@@ -408,17 +409,19 @@ export const leaveMcpTools = {
       // Find admin for this employee
       const adminsSnap = await db.collection('users').where('role', '==', 'admin').get()
       let adminId = ''
+      let reviewerName = 'HR Manager'
       for (const adminDoc of adminsSnap.docs) {
         const adminData = adminDoc.data()
         const managedIds: string[] = adminData.managedEmployeeIds ?? []
         if (managedIds.length === 0 || managedIds.includes(employeeId)) {
           adminId = adminDoc.id
+          reviewerName = adminData.name ?? 'HR Manager'
           break
         }
       }
 
-      // Since we gate on cert before this point, docStatus is always uploaded or not_required
-      const docStatus = certificateRequired ? 'uploaded' : 'not_required'
+      // docStatus: employee_override means doc was uploaded but AI flagged it — HR must review
+      const docStatus = !certificateRequired ? 'not_required' : employeeDocOverride ? 'employee_override' : 'uploaded'
       const status = 'open'
       const priority = leaveType === 'FMLA' || leaveType === 'Maternity' || leaveType === 'Paternity'
         ? 'high'
@@ -503,6 +506,7 @@ export const leaveMcpTools = {
         docStatus,
         reason,
         isRetroactive,
+        reviewerName,
         message: `Leave submitted successfully (Case #${caseRef.id.slice(-6).toUpperCase()}).`,
       }
     },
@@ -715,8 +719,22 @@ export const leaveMcpTools = {
     }),
     execute: async ({ employeeId, leaveType, startDate, endDate, reason, certificateRequired }) => {
       const db = getAdminDb()
-      const snap = await db.collection('users').doc(employeeId).get()
+      const [snap, adminsSnap] = await Promise.all([
+        db.collection('users').doc(employeeId).get(),
+        db.collection('users').where('role', '==', 'admin').get(),
+      ])
       const balances = snap.exists ? normalizeBalances(snap.data()!.balances) : EMPTY_BALANCES
+
+      // Find the admin who manages this employee
+      let reviewerName = 'HR Manager'
+      for (const adminDoc of adminsSnap.docs) {
+        const adminData = adminDoc.data()
+        const managedIds: string[] = adminData.managedEmployeeIds ?? []
+        if (managedIds.length === 0 || managedIds.includes(employeeId)) {
+          reviewerName = adminData.name ?? 'HR Manager'
+          break
+        }
+      }
 
       const balanceKeyMap: Record<string, string> = {
         PTO: 'pto', Sick: 'sick', Personal: 'personal', Bereavement: 'bereavement',
@@ -743,6 +761,7 @@ export const leaveMcpTools = {
         remainingAfter,
         weekendDays: breakdown.weekendDays,
         holidays: breakdown.holidays,
+        reviewerName,
         message: 'Review your leave request below.',
       }
     },

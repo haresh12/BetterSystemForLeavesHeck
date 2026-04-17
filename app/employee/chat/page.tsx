@@ -7,11 +7,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/AuthContext'
 import { useNotifications } from '@/hooks/useNotifications'
 import { MessageBubble, TypingRow } from '@/components/chat/MessageBubble'
-import { ChatInput, type PendingDoc } from '@/components/chat/ChatInput'
+import { ChatInput, type PendingDoc, type ChatInputHandle } from '@/components/chat/ChatInput'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { NotificationBell } from '@/components/ui/notification-panel'
 import {
-  Bell, LogOut, ChevronRight,
+  LogOut, ChevronRight,
   Wallet, Calendar, FileText, HelpCircle, Sparkles,
   Menu, X, Plus,
 } from 'lucide-react'
@@ -275,10 +276,11 @@ export default function EmployeeChatPage() {
   const router = useRouter()
   const { profile, signOut } = useAuth()
   const typedText = useTypewriter(TYPING_EXAMPLES, 40, 2200)
-  const { notifications, unreadCount } = useNotifications(profile?.uid)
+  const { notifications, unreadCount, markAllRead } = useNotifications(profile?.uid)
   const [input, setInput] = useState('')
   const [pendingFile, setPendingFile] = useState<PendingDoc | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<ChatInputHandle>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   const STORAGE_KEY = 'convowork_chat_history'
@@ -638,17 +640,11 @@ export default function EmployeeChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="relative h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
-              <Bell className="h-4 w-4" />
-              {unreadCount > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 h-4 w-4 flex items-center justify-center text-white text-[9px] font-bold rounded-full"
-                  style={{ background: '#6366f1' }}
-                >
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkAllRead={markAllRead}
+            />
             <div className="lg:hidden">
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="text-[10px] font-bold bg-brand/15 text-brand">{initials}</AvatarFallback>
@@ -845,6 +841,7 @@ export default function EmployeeChatPage() {
                     message={message}
                     isStreaming={isLoading && i === messages.length - 1 && message.role === 'assistant'}
                     onSend={(text) => sendMessage({ text })}
+                    onReupload={() => chatInputRef.current?.openFilePicker()}
                   />
                 ))}
                 <AnimatePresence>
@@ -867,6 +864,7 @@ export default function EmployeeChatPage() {
         >
           <div className="max-w-5xl mx-auto px-4 lg:px-6 pb-5 pt-3">
             <ChatInput
+              ref={chatInputRef}
               input={input}
               isLoading={isLoading}
               onInputChange={(e) => setInput(e.target.value)}

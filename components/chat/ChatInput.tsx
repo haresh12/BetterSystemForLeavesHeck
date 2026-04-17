@@ -1,6 +1,10 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
+
+export interface ChatInputHandle {
+  openFilePicker: () => void
+}
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn, fileToBase64 } from '@/lib/utils'
@@ -44,13 +48,17 @@ interface ChatInputProps {
   onFileAttach?: (file: PendingDoc | null) => void
 }
 
-export function ChatInput({
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
   input, isLoading, onInputChange, onSubmit, placeholder = 'Type a message…',
   hideUpload, pendingFile, onFileAttach,
-}: ChatInputProps) {
+}: ChatInputProps, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(false)
+
+  useImperativeHandle(ref, () => ({
+    openFilePicker: () => fileInputRef.current?.click(),
+  }))
 
   async function processFile(file: File) {
     const base64 = await fileToBase64(file)
@@ -258,4 +266,4 @@ export function ChatInput({
       </div>
     </div>
   )
-}
+})

@@ -1,6 +1,6 @@
 'use client'
 
-import { Calendar, FileText, CheckCircle2, AlertTriangle, ChevronRight, Briefcase } from 'lucide-react'
+import { Calendar, FileText, CheckCircle2, AlertTriangle, ChevronRight, Briefcase, UserCheck } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface LeaveConfirmCardProps {
@@ -15,6 +15,7 @@ interface LeaveConfirmCardProps {
   remainingAfter: number
   weekendDays?: number
   holidays?: Array<{ date: string; name: string }>
+  reviewerName?: string
   message?: string
 }
 
@@ -46,7 +47,7 @@ function fmtFull(iso: string) {
 export function LeaveConfirmCard({
   leaveType, startDate, endDate, days, deductedDays, reason,
   certificateRequired, currentBalance, remainingAfter,
-  weekendDays, holidays,
+  weekendDays, holidays, reviewerName,
 }: LeaveConfirmCardProps) {
   const actualDeducted = deductedDays ?? days
   const cfg = TYPE_CONFIG[leaveType] ?? TYPE_CONFIG.PTO
@@ -198,6 +199,17 @@ export function LeaveConfirmCard({
                 Low balance after this request
               </div>
             )}
+          </div>
+        )}
+
+        {/* Reviewer */}
+        {reviewerName && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderRadius: 12, padding: '10px 14px', background: cfg.soft, border: `1px solid ${cfg.border}` }}>
+            <UserCheck className="h-4 w-4 shrink-0" style={{ color: cfg.accent }} />
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: '#94a3b8', marginBottom: 2 }}>Reviewing manager</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{reviewerName}</p>
+            </div>
           </div>
         )}
 

@@ -16,6 +16,8 @@ interface DocumentChecklistCardProps {
   checks: Record<string, CheckItem>
   onReupload?: () => void
   onDismiss?: () => void
+  onProceed?: () => void
+  onCancel?: () => void
 }
 
 const CHECK_LABELS: Record<string, string> = {
@@ -72,7 +74,7 @@ const TIER_STYLES: Record<Tier, {
 }
 
 export function DocumentChecklistCard({
-  fileName, confidenceScore, documentType, isValid, checks, onReupload, onDismiss,
+  fileName, confidenceScore, documentType, isValid, checks, onReupload, onDismiss, onProceed, onCancel,
 }: DocumentChecklistCardProps) {
   const pct = confidenceScore != null ? Math.round(confidenceScore * 100) : 0
   const tier = getTier(pct)
@@ -249,21 +251,60 @@ export function DocumentChecklistCard({
         </div>
 
         {/* ── Footer ── */}
-        {!allPass && onReupload && (
-          <div style={{ padding: '10px 16px', borderTop: `1px solid ${s.divider}` }}>
-            <button
-              onClick={onReupload}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 13, fontWeight: 700, color: '#dc2626',
-                background: '#fee2e2', border: '1px solid #fecaca',
-                borderRadius: 8, padding: '6px 12px',
-                cursor: 'pointer',
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Re-upload document
-            </button>
+        {!allPass && (onReupload || onProceed || onCancel) && (
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${s.divider}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Action buttons row */}
+            {(onProceed || onCancel) && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {onProceed && (
+                  <button
+                    onClick={onProceed}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      fontSize: 13, fontWeight: 700, color: '#fff',
+                      background: '#6366f1', border: '1px solid #4f46e5',
+                      borderRadius: 8, padding: '8px 14px', cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+                    }}
+                  >
+                    Proceed anyway — let HR review
+                  </button>
+                )}
+                {onCancel && (
+                  <button
+                    onClick={onCancel}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      fontSize: 13, fontWeight: 700, color: '#64748b',
+                      background: '#f8fafc', border: '1px solid #e2e8f0',
+                      borderRadius: 8, padding: '8px 14px', cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Re-upload option */}
+            {onReupload ? (
+              <button
+                onClick={onReupload}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  fontSize: 12, fontWeight: 600, color: '#dc2626',
+                  background: 'none', border: 'none', padding: '2px 0',
+                  cursor: 'pointer', width: 'fit-content',
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Re-upload a better document
+              </button>
+            ) : (onProceed || onCancel) ? (
+              <p style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <RotateCcw className="h-3 w-3" style={{ flexShrink: 0 }} />
+                Or use the attachment button below to upload a clearer document
+              </p>
+            ) : null}
           </div>
         )}
       </div>

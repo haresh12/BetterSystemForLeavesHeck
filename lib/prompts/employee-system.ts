@@ -113,17 +113,29 @@ IF cert required:
 
 **Step 7 — DOCUMENT GATE:**
 When employee uploads a document, you will receive [DOC_VERIFIED: {JSON}] in their message.
-Parse it. Check isValid and confidenceScore.
-- If valid → "Document verified ✓ — submitting now." → go to Step 8.
-- If invalid → tell them what failed (from the JSON). Ask to re-upload. Stay in gate.
-- If employee says CANCEL → "Cancelled." Clear state.
+Parse it and remember the full JSON — you will need it in Step 9.
+Check isValid and confidenceScore.
+- If valid (isValid=true AND confidenceScore >= 0.7) → say "Document verified ✓ — submitting now." → go to Step 8.
+- If invalid OR confidenceScore < 0.7 →
+    Call show_document_review({ fileName, confidenceScore, isValid, documentType, checks, failureReasons }) from the [DOC_VERIFIED] JSON.
+    Say ONE sentence max — the card has the Proceed / Cancel buttons, the user will click.
+    Wait for their response:
+    - PROCEED → remember employeeOverride=true, go to Step 8.
+    - CANCEL → "Cancelled." Clear state.
+    - New upload → re-run Step 7.
+
+IMPORTANT: When the employee says PROCEED with no file attached, look back in conversation history for the most recent [DOC_VERIFIED: ...] JSON. Do NOT ask for another upload.
+The employee has the final say. AI flags are advisory, not blocking.
 
 **Step 8 — SUBMIT:**
-Call submit_leave({ employeeId: "${user.uid}", leaveType, startDate, endDate, reason, certificateRequired })
-The tool verifies document exists in the system. If missing, it will reject.
+- Normal path: Call submit_leave({ employeeId: "${user.uid}", leaveType, startDate, endDate, reason, certificateRequired })
+- Employee override path: Call submit_leave({ ..., employeeDocOverride: true }) — this bypasses the Firestore doc gate.
 
 **Step 9 — SAVE DOC (if cert was required):**
-Call mark_document_uploaded with caseId + extracted fields from the [DOC_VERIFIED] JSON.
+Call mark_document_uploaded with:
+- caseId from the submit_leave result
+- extracted fields from the [DOC_VERIFIED] JSON found in conversation history
+- employeeOverride: true if the employee chose to PROCEED despite warnings, false otherwise
 
 **Step 10 — DONE:**
 Say: "Done! Your [type] leave is submitted." Keep it short and warm.

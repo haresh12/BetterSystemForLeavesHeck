@@ -101,13 +101,15 @@ Output ONLY a JSON object with these exact fields:
   }),
 
   mark_document_uploaded: tool({
-    description: 'Save a verified document to Firestore and update the case docStatus.',
+    description: 'Save a verified document to Firestore and update the case docStatus. Set employeeOverride=true when the employee chose to proceed despite AI flagging the document as invalid — the document is saved for HR review instead of being rejected.',
     inputSchema: z.object({
       caseId: z.string(),
       employeeId: z.string(),
       fileName: z.string(),
       fileUrl: z.string().nullable().optional().describe('Public URL of the uploaded document in Firebase Storage'),
-        extractedFields: z.object({
+      employeeOverride: z.boolean().optional().default(false)
+        .describe('True when employee explicitly chose to proceed despite AI document warnings'),
+      extractedFields: z.object({
         patientName: z.string().nullable(),
         doctorName: z.string().nullable(),
         hospital: z.string().nullable(),
@@ -120,9 +122,14 @@ Output ONLY a JSON object with these exact fields:
         confidenceScore: z.number(),
       }),
     }),
-    execute: async ({ caseId, employeeId, fileName, fileUrl, extractedFields }) => {
+    execute: async ({ caseId, employeeId, fileName, fileUrl, employeeOverride, extractedFields }) => {
       const db = getAdminDb()
       const now = FieldValue.serverTimestamp()
+
+      // employee_override: employee insisted on submitting despite AI warnings — HR will review
+      const docStatus = extractedFields.isValid
+        ? 'valid'
+        : (employeeOverride ? 'employee_override' : 'invalid')
 
       const docRef = await db.collection('documents').add({
         caseId,
@@ -131,20 +138,37 @@ Output ONLY a JSON object with these exact fields:
         fileUrl: fileUrl ?? null,
         uploadedAt: now,
         extractedFields,
-        status: extractedFields.isValid ? 'valid' : 'invalid',
+        status: docStatus,
+        employeeOverride: employeeOverride ?? false,
       })
 
       const caseSnap = await db.collection('cases').doc(caseId).get()
       const existingNotes = caseSnap.exists ? (caseSnap.data()!.notes ?? []) : []
 
+      let noteText: string
+      let caseDocStatus: string
+      let caseStatus: string
+
+      if (extractedFields.isValid) {
+        noteText = `Document verified: ${fileName} — confidence ${Math.round(extractedFields.confidenceScore * 100)}%`
+        caseDocStatus = 'uploaded'
+        caseStatus = 'open'
+      } else if (employeeOverride) {
+        noteText = `Document uploaded by employee (AI flagged issues, employee chose to proceed — HR review required): ${extractedFields.invalidReason ?? 'See document'}`
+        caseDocStatus = 'uploaded'
+        caseStatus = 'open'
+      } else {
+        noteText = `Document invalid: ${extractedFields.invalidReason ?? 'Verification failed'}`
+        caseDocStatus = 'invalid'
+        caseStatus = 'pending_docs'
+      }
+
       await db.collection('cases').doc(caseId).update({
-        docStatus: extractedFields.isValid ? 'uploaded' : 'invalid',
-        status: extractedFields.isValid ? 'open' : 'pending_docs',
+        docStatus: caseDocStatus,
+        status: caseStatus,
         updatedAt: now,
         notes: [...existingNotes, {
-          text: extractedFields.isValid
-            ? `Document verified: ${fileName} — confidence ${Math.round(extractedFields.confidenceScore * 100)}%`
-            : `Document invalid: ${extractedFields.invalidReason ?? 'Verification failed'}`,
+          text: noteText,
           actorId: employeeId,
           actorName: 'Employee',
           actorRole: 'employee',
@@ -156,7 +180,8 @@ Output ONLY a JSON object with these exact fields:
         success: true,
         documentId: docRef.id,
         caseId,
-        status: extractedFields.isValid ? 'valid' : 'invalid',
+        status: docStatus,
+        employeeOverride: employeeOverride ?? false,
       }
     },
   }),
@@ -183,6 +208,22 @@ Output ONLY a JSON object with these exact fields:
         uploadedAt: docData.uploadedAt?.toDate?.()?.toISOString() ?? null,
       }
     },
+  }),
+
+  show_document_review: tool({
+    description: 'Show a visual document review card with action buttons (Proceed / Cancel) when a document fails AI verification. Call this INSTEAD of plain text whenever isValid=false or confidenceScore < 0.7 after a document upload.',
+    inputSchema: z.object({
+      fileName: z.string(),
+      confidenceScore: z.number(),
+      isValid: z.boolean(),
+      documentType: z.string().optional().default('other'),
+      checks: z.record(z.string(), z.object({ pass: z.boolean(), note: z.string() })),
+      failureReasons: z.array(z.string()).optional().default([]),
+    }),
+    execute: async (args) => ({
+      ui_component: 'DocumentReviewCard',
+      ...args,
+    }),
   }),
 
   list_case_documents: tool({

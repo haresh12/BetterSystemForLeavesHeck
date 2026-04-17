@@ -12,6 +12,7 @@ import { ProactiveAlertCard } from '@/components/cards/ProactiveAlertCard'
 import { TrendCard } from '@/components/cards/TrendCard'
 import { LeaveConfirmCard } from '@/components/cards/LeaveConfirmCard'
 import { LeaveTypePickerCard } from '@/components/cards/LeaveTypePickerCard'
+import { DocumentChecklistCard } from '@/components/chat/DocumentChecklistCard'
 import { cn } from '@/lib/utils'
 
 interface MessageBubbleProps {
@@ -19,6 +20,7 @@ interface MessageBubbleProps {
   isStreaming?: boolean
   suppressCards?: string[]
   onSend?: (text: string) => void
+  onReupload?: () => void
 }
 
 // ── Typing dots ───────────────────────────────────────────────────────────────
@@ -80,7 +82,7 @@ function WorkingBadge() {
 }
 
 // ── Tool output renderer ──────────────────────────────────────────────────────
-function renderToolOutput(result: unknown, onSend?: (text: string) => void, suppressCards?: string[]) {
+function renderToolOutput(result: unknown, onSend?: (text: string) => void, suppressCards?: string[], onReupload?: () => void) {
   if (!result || typeof result !== 'object') return null
   const r = result as Record<string, unknown>
   const c = r.ui_component as string | undefined
@@ -105,6 +107,19 @@ function renderToolOutput(result: unknown, onSend?: (text: string) => void, supp
     return <LeaveConfirmCard {...(r as any)} />
   if (c === 'LeaveTypePickerCard')
     return <LeaveTypePickerCard options={(r.options as any[]) ?? []} onSelect={onSend} />
+  if (c === 'DocumentReviewCard')
+    return (
+      <DocumentChecklistCard
+        fileName={r.fileName as string}
+        confidenceScore={r.confidenceScore as number}
+        documentType={r.documentType as string}
+        isValid={r.isValid as boolean}
+        checks={(r.checks as any) ?? {}}
+        onProceed={onSend ? () => onSend('PROCEED') : undefined}
+        onCancel={onSend ? () => onSend('CANCEL') : undefined}
+        onReupload={onReupload}
+      />
+    )
   return null
 }
 
@@ -217,7 +232,7 @@ function MessageText({ content }: { content: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function MessageBubble({ message, isStreaming, onSend, suppressCards }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming, onSend, suppressCards, onReupload }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   const textContent = (message.parts ?? [])
@@ -309,7 +324,7 @@ export function MessageBubble({ message, isStreaming, onSend, suppressCards }: M
 
         {/* Card outputs */}
         {completedTools.map((p, i) => {
-          const card = renderToolOutput(p.output, onSend, suppressCards)
+          const card = renderToolOutput(p.output, onSend, suppressCards, onReupload)
           if (!card) return null
           return (
             <motion.div
