@@ -89,29 +89,29 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
         initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0, width: 520, zIndex: 51,
-          background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.12)',
+          position: 'fixed', top: 0, right: 0, bottom: 0, width: 560, zIndex: 51,
+          background: '#fff', boxShadow: '-8px 0 48px rgba(0,0,0,0.13)',
           display: 'flex', flexDirection: 'column',
         }}
       >
         {/* Header */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #ebebf0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ height: 36, width: 36, borderRadius: 10, background: `${typeColor}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 12, fontWeight: 900, color: typeColor }}>{c.leaveType.slice(0, 2)}</span>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #ebebf0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: `linear-gradient(135deg, ${typeColor}06, transparent)` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ height: 48, width: 48, borderRadius: 14, background: `${typeColor}15`, border: `1.5px solid ${typeColor}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 12px ${typeColor}20` }}>
+              <span style={{ fontSize: 14, fontWeight: 900, color: typeColor }}>{c.leaveType.slice(0, 2)}</span>
             </div>
             <div>
-              <p style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e' }}>{c.employeeName}</p>
-              <p style={{ fontSize: 12, color: '#64748b' }}>#{c.caseId.slice(-6).toUpperCase()} · {c.leaveType} · {c.isHalfDay ? '½d' : `${c.days}d`}{c.isHalfDay && c.halfDayPeriod ? ` (${c.halfDayPeriod === 'morning' ? 'AM' : 'PM'})` : ''}</p>
+              <p style={{ fontSize: 17, fontWeight: 800, color: '#1a1a2e' }}>{c.employeeName}</p>
+              <p style={{ fontSize: 13, color: '#64748b', marginTop: 1 }}>#{c.caseId.slice(-6).toUpperCase()} · <span style={{ color: typeColor, fontWeight: 700 }}>{c.leaveType}</span> · {c.isHalfDay ? '½d' : `${c.days}d`}{c.isHalfDay && c.halfDayPeriod ? ` (${c.halfDayPeriod === 'morning' ? 'AM' : 'PM'})` : ''}</p>
             </div>
           </div>
-          <button onClick={onClose} style={{ height: 32, width: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', background: '#f1f5f9', border: 'none', cursor: 'pointer' }}>
+          <button onClick={onClose} style={{ height: 36, width: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', background: '#f1f5f9', border: '1px solid #e8e8f0', cursor: 'pointer' }}>
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
 
           {/* AI Assessment Section */}
           {(assessing || assessment) && (
@@ -260,18 +260,18 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
           )}
 
           {/* Leave details grid */}
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Leave Details</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Leave Details</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
                 { label: 'TYPE', value: c.leaveType, color: typeColor },
                 { label: 'DAYS', value: c.isHalfDay ? '½ day' + (c.halfDayPeriod ? ` (${c.halfDayPeriod})` : '') : `${c.days} day${c.days > 1 ? 's' : ''}`, color: '#1a1a2e' },
                 { label: 'START', value: formatDate(c.startDate), color: '#1a1a2e' },
                 { label: 'END', value: formatDate(c.endDate), color: '#1a1a2e' },
               ].map(item => (
-                <div key={item.label} style={{ padding: '8px 12px', borderRadius: 10, background: '#f8f9fc', border: '1px solid #ebebf0' }}>
-                  <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700 }}>{item.label}</p>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: item.color, marginTop: 2 }}>{item.value}</p>
+                <div key={item.label} style={{ padding: '12px 14px', borderRadius: 12, background: '#f8f9fc', border: '1px solid #ebebf0' }}>
+                  <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>{item.label}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: item.color, marginTop: 3 }}>{item.value}</p>
                 </div>
               ))}
             </div>
@@ -279,9 +279,9 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
 
           {/* Reason */}
           {c.reason && (
-            <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 10, background: '#f8f9fc', border: '1px solid #ebebf0' }}>
-              <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700 }}>REASON</p>
-              <p style={{ fontSize: 14, color: '#1a1a2e', fontWeight: 500, marginTop: 3 }}>{c.reason}</p>
+            <div style={{ marginBottom: 20, padding: '12px 14px', borderRadius: 12, background: '#f8f9fc', border: '1px solid #ebebf0' }}>
+              <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>REASON</p>
+              <p style={{ fontSize: 14, color: '#1a1a2e', fontWeight: 500, marginTop: 4, lineHeight: 1.5 }}>{c.reason}</p>
             </div>
           )}
 
@@ -307,7 +307,7 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
 
         {/* Action bar */}
         {(c.status === 'open' || c.status === 'pending_docs') && (
-          <div style={{ padding: '14px 20px', borderTop: '1px solid #ebebf0', background: '#fafafc' }}>
+          <div style={{ padding: '18px 24px', borderTop: '1px solid #ebebf0', background: '#fafafc' }}>
             {showRejectInput ? (
               <div>
                 <input
@@ -315,25 +315,25 @@ export function CaseSlideOver({ caseData, onClose, onApprove, onReject }: CaseSl
                   onChange={(e) => setRejectReason(e.target.value)}
                   placeholder="Enter rejection reason..."
                   autoFocus
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e8e8f0', fontSize: 14, color: '#1a1a2e', marginBottom: 8, outline: 'none' }}
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #e8e8f0', fontSize: 14, color: '#1a1a2e', marginBottom: 10, outline: 'none', boxSizing: 'border-box' }}
                   onKeyDown={(e) => { if (e.key === 'Enter' && rejectReason.trim()) { onReject(c.caseId, rejectReason); onClose() } }}
                 />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => { if (rejectReason.trim()) { onReject(c.caseId, rejectReason); onClose() } }} disabled={!rejectReason.trim()} style={{ flex: 1, padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: rejectReason.trim() ? '#ef4444' : '#f1f5f9', color: rejectReason.trim() ? '#fff' : '#94a3b8', border: 'none', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed' }}>Confirm Reject</button>
-                  <button onClick={() => setShowRejectInput(false)} style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: '#f1f5f9', color: '#64748b', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => { if (rejectReason.trim()) { onReject(c.caseId, rejectReason); onClose() } }} disabled={!rejectReason.trim()} style={{ flex: 1, padding: '13px', borderRadius: 12, fontSize: 14, fontWeight: 700, background: rejectReason.trim() ? '#ef4444' : '#f1f5f9', color: rejectReason.trim() ? '#fff' : '#94a3b8', border: 'none', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed' }}>Confirm Reject</button>
+                  <button onClick={() => setShowRejectInput(false)} style={{ padding: '13px 20px', borderRadius: 12, fontSize: 14, fontWeight: 700, background: '#f1f5f9', color: '#64748b', border: 'none', cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => { onApprove(c.caseId); onClose() }}
-                  style={{ flex: 1, padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 800, background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(22,163,106,0.3)' }}
+                  style={{ flex: 1, padding: '14px', borderRadius: 12, fontSize: 15, fontWeight: 800, background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(22,163,106,0.35)' }}
                 >
                   Approve
                 </button>
                 <button
                   onClick={() => setShowRejectInput(true)}
-                  style={{ flex: 1, padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 800, background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '14px', borderRadius: 12, fontSize: 15, fontWeight: 800, background: '#fee2e2', color: '#dc2626', border: '1.5px solid #fecaca', cursor: 'pointer' }}
                 >
                   Reject
                 </button>

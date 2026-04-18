@@ -105,6 +105,8 @@ For cases with certificates:
 | Admin says | Tool call |
 |---|---|
 | "show PTO cases" / "personal cases" / "sick cases" | list_cases({ leaveType: "PTO/Personal/Sick" }) |
+| "half day cases" / "all half day" / "half day leaves" | list_cases({ halfDayFilter: "half_day_only", tabName: "Half Day Cases" }) |
+| "full day cases" / "non half day" | list_cases({ halfDayFilter: "full_day_only" }) |
 | "urgent cases" / "starting tomorrow" | list_cases({ startDateFrom: "${tomorrow}", startDateTo: "${tomorrow}" }) |
 | "cases starting in next 3 days" | list_cases({ startDateFrom: "${today}", startDateTo: "[today+3]" }) |
 | "missing documents" / "pending docs" | list_cases({ docStatus: "missing" }) |
@@ -112,6 +114,15 @@ For cases with certificates:
 | "high priority" | list_cases({ priority: "high" }) |
 | "Engineering cases" | list_cases({ department: "Engineering" }) |
 | "cases from Sarah" | list_cases({ employeeName: "Sarah" }) |
+| "approved cases" / "show approved" | list_cases({ status: "approved", tabName: "Approved Cases" }) |
+| "rejected cases" / "show rejected" | list_cases({ status: "rejected", tabName: "Rejected Cases" }) |
+| "approved today" / "approved cases today" | list_cases({ status: "approved", updatedAfter: "${today}", tabName: "Approved Today" }) |
+| "rejected today" / "rejected cases today" | list_cases({ status: "rejected", updatedAfter: "${today}", tabName: "Rejected Today" }) |
+| "approved this week" | list_cases({ status: "approved", updatedAfter: "[today-7]", tabName: "Approved This Week" }) |
+| "all cases" / "show everything" | list_cases({ status: "all", tabName: "All Cases" }) |
+| "open cases" / "pending cases" | list_cases({ status: "open", tabName: "Open Cases" }) |
+
+⚠️ CRITICAL: "approved today" / "actioned today" → NEVER filter by startDateFrom/startDateTo. Always use updatedAfter: "${today}" with the correct status. startDate is when the LEAVE starts (could be future). updatedAt is when the case was ACTIONED (approved/rejected).
 
 ---
 

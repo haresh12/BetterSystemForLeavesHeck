@@ -40,10 +40,12 @@ export const casesMcpTools = {
       startDateTo: z.string().optional().describe('ISO date — filter cases where LEAVE starts up to this date'),
       updatedAfter: z.string().optional().describe('ISO date — filter cases updated/actioned AFTER this date. Use for "rejected today", "approved this week", etc.'),
       employeeName: z.string().optional().describe('Partial employee name search'),
+      halfDayFilter: z.enum(['all', 'half_day_only', 'full_day_only']).optional().default('all')
+        .describe('"half_day_only" = only half-day cases, "full_day_only" = only full-day cases'),
       sortBy: z.enum(['createdAt', 'startDate', 'priority']).optional().default('createdAt'),
       limit: z.number().optional().default(50),
     }),
-    execute: async ({ adminId, tabName, status, leaveType, docStatus, priority, department, minTenureYears, startDateFrom, startDateTo, updatedAfter, employeeName, sortBy, limit }) => {
+    execute: async ({ adminId, tabName, status, leaveType, docStatus, priority, department, minTenureYears, startDateFrom, startDateTo, updatedAfter, employeeName, halfDayFilter, sortBy, limit }) => {
       const db = getAdminDb()
 
       const adminSnap = await db.collection('users').doc(adminId).get()
@@ -62,6 +64,8 @@ export const casesMcpTools = {
         cases = cases.filter((c) => managedIds.includes(c.employeeId))
       }
 
+      if (halfDayFilter === 'half_day_only') cases = cases.filter((c) => c.isHalfDay === true)
+      else if (halfDayFilter === 'full_day_only') cases = cases.filter((c) => !c.isHalfDay)
       if (status !== 'all') cases = cases.filter((c) => c.status === status)
       if (leaveType !== 'all') cases = cases.filter((c) => c.leaveType === leaveType)
       if (docStatus !== 'all') cases = cases.filter((c) => c.docStatus === docStatus)

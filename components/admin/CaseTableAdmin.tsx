@@ -59,8 +59,8 @@ export function CaseTableAdmin({ cases, onCaseClick, onApprove, onFilterByType, 
               transition={{ delay: Math.min(i * 0.01, 0.3) }}
               onClick={() => onCaseClick(c)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '11px 16px',
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 20px',
                 borderBottom: '1px solid #f5f5f8',
                 cursor: 'pointer',
                 borderLeft: `4px solid ${stripColor}`,
@@ -74,10 +74,10 @@ export function CaseTableAdmin({ cases, onCaseClick, onApprove, onFilterByType, 
               <div
                 onClick={(e) => { e.stopPropagation(); onFilterByType(`Show all ${c.leaveType} cases`) }}
                 style={{
-                  height: 36, width: 36, borderRadius: 9, flexShrink: 0,
+                  height: 42, width: 42, borderRadius: 11, flexShrink: 0,
                   background: `${typeColor}10`, border: `1.5px solid ${typeColor}20`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 900, color: typeColor,
+                  fontSize: 12, fontWeight: 900, color: typeColor,
                   cursor: 'pointer', transition: 'all 0.1s',
                 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = `${typeColor}25` }}
@@ -89,70 +89,70 @@ export function CaseTableAdmin({ cases, onCaseClick, onApprove, onFilterByType, 
 
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: '#1a1a2e' }}>{c.employeeName}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e' }}>{c.employeeName}</span>
                   <span
-                    style={{ fontSize: 11, fontWeight: 700, color: typeColor, cursor: 'pointer' }}
+                    style={{ fontSize: 12, fontWeight: 700, color: typeColor, cursor: 'pointer' }}
                     onClick={(e) => { e.stopPropagation(); onFilterByType(`Show all ${c.leaveType} cases`) }}
                   >
                     {c.leaveType}
                   </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>{c.isHalfDay ? '½d' : `${c.days}d`}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{c.isHalfDay ? '½d' : `${c.days}d`}</span>
                   {c.isHalfDay && c.halfDayPeriod && (
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#f0f4ff', color: '#6366f1' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 5, background: '#f0f4ff', color: '#6366f1' }}>
                       {c.halfDayPeriod === 'morning' ? 'AM' : 'PM'}
                     </span>
                   )}
-                  {urgent && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#fef2f2', color: '#dc2626' }}>URGENT</span>}
-                  {needsDoc && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#fef9c3', color: '#a16207' }}>DOCS</span>}
-                  {c.priority === 'high' && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#fee2e2', color: '#dc2626' }}>HIGH</span>}
+                  {urgent && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, background: '#fef2f2', color: '#dc2626' }}>URGENT</span>}
+                  {needsDoc && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, background: '#fef9c3', color: '#a16207' }}>DOCS</span>}
+                  {c.priority === 'high' && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, background: '#fee2e2', color: '#dc2626' }}>HIGH</span>}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>{fmtDate(c.startDate)} - {fmtDate(c.endDate)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
+                  <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>{fmtDate(c.startDate)} — {fmtDate(c.endDate)}</span>
                   <span
-                    style={{ fontSize: 11, color: '#94a3b8', cursor: 'pointer' }}
+                    style={{ fontSize: 12, color: '#94a3b8', cursor: 'pointer', fontWeight: 500 }}
                     onClick={(e) => { e.stopPropagation(); onFilterByType(`Show cases from ${c.employeeDepartment} department`) }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#4f46e5' }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#94a3b8' }}
                   >
                     {c.employeeDepartment}
                   </span>
-                  <span style={{ fontSize: 11, color: '#c0c0d0', fontStyle: 'italic' }}>{c.reason?.slice(0, 28)}{(c.reason?.length ?? 0) > 28 ? '...' : ''}</span>
+                  <span style={{ fontSize: 12, color: '#c0c0d0', fontStyle: 'italic' }}>{c.reason?.slice(0, 32)}{(c.reason?.length ?? 0) > 32 ? '...' : ''}</span>
                 </div>
               </div>
 
               {/* AI Verdict */}
-              <div style={{ width: 120, flexShrink: 0, textAlign: 'center' }}>
+              <div style={{ width: 130, flexShrink: 0, textAlign: 'center' }}>
                 {isReviewing ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: '#6366f1' }} />
-                    <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>Analyzing...</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#6366f1' }} />
+                    <span style={{ fontSize: 12, color: '#6366f1', fontWeight: 600 }}>Analyzing...</span>
                   </div>
                 ) : vCfg ? (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      padding: '4px 8px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                      padding: '6px 10px', borderRadius: 8,
                       background: vCfg.bg, border: `1px solid ${vCfg.border}`,
                     }}
                   >
-                    <vCfg.icon className="h-3 w-3" style={{ color: vCfg.color }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: vCfg.color }}>{vCfg.label}</span>
+                    <vCfg.icon className="h-3.5 w-3.5" style={{ color: vCfg.color }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: vCfg.color }}>{vCfg.label}</span>
                   </motion.div>
                 ) : null}
               </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
                 {c.status === 'open' && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onApprove(c.caseId, c.employeeName) }}
                     style={{
-                      fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 7,
+                      fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 9,
                       background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer',
-                      boxShadow: '0 2px 6px rgba(22,163,106,0.2)',
+                      boxShadow: '0 2px 8px rgba(22,163,106,0.25)',
                     }}
                   >
                     Approve

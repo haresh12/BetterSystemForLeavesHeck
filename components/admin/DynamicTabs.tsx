@@ -44,8 +44,8 @@ export function DynamicTabs({ tabs, activeTabId, onTabClick, onTabClose, onAIRev
               animate={{ opacity: 1, scale: 1, width: 'auto' }}
               transition={{ duration: 0.25, type: 'spring', stiffness: 300, damping: 25 }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '10px 14px',
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '13px 18px',
                 borderBottom: isActive ? `3px solid ${tab.color}` : '3px solid transparent',
                 background: isActive ? '#fff' : 'transparent',
                 cursor: 'pointer',
@@ -54,11 +54,11 @@ export function DynamicTabs({ tabs, activeTabId, onTabClick, onTabClose, onAIRev
               }}
               onClick={() => onTabClick(tab.id)}
             >
-              {tab.createdByAI && <Sparkles className="h-3 w-3" style={{ color: tab.color }} />}
-              <span style={{ fontSize: 13, fontWeight: isActive ? 800 : 600, color: isActive ? tab.color : '#64748b', whiteSpace: 'nowrap' }}>
+              {tab.createdByAI && <Sparkles className="h-3.5 w-3.5" style={{ color: tab.color }} />}
+              <span style={{ fontSize: 14, fontWeight: isActive ? 800 : 600, color: isActive ? tab.color : '#64748b', whiteSpace: 'nowrap' }}>
                 {tab.label}
               </span>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: isActive ? `${tab.color}12` : '#f1f5f9', color: isActive ? tab.color : '#94a3b8' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: isActive ? `${tab.color}12` : '#f1f5f9', color: isActive ? tab.color : '#94a3b8' }}>
                 {tab.caseIds.length}
               </span>
               {tab.reviewing && (
@@ -66,26 +66,26 @@ export function DynamicTabs({ tabs, activeTabId, onTabClick, onTabClose, onAIRev
                   animate={{ rotate: 360 }}
                   transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
                 >
-                  <Bot className="h-3 w-3" style={{ color: tab.color }} />
+                  <Bot className="h-3.5 w-3.5" style={{ color: tab.color }} />
                 </motion.div>
               )}
               {tab.id !== 'all' && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onTabClose(tab.id) }}
-                  style={{ height: 16, width: 16, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c0c0d0', background: 'none', border: 'none', cursor: 'pointer' }}
+                  style={{ height: 18, width: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c0c0d0', background: 'none', border: 'none', cursor: 'pointer' }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444' }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#c0c0d0' }}
                 >
-                  <X className="h-2.5 w-2.5" />
+                  <X className="h-3 w-3" />
                 </button>
               )}
             </motion.div>
           )
         })}
         {tabs.length <= 1 && (
-          <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Sparkles className="h-3 w-3" style={{ color: '#c7d2fe' }} />
-            <span style={{ fontSize: 11, color: '#b0b0c0', fontStyle: 'italic' }}>Type a filter in AI chat to create tabs</span>
+          <div style={{ padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles className="h-3.5 w-3.5" style={{ color: '#c7d2fe' }} />
+            <span style={{ fontSize: 12, color: '#b0b0c0', fontStyle: 'italic' }}>Type a filter in AI chat to create tabs</span>
           </div>
         )}
       </div>
@@ -97,26 +97,26 @@ export function DynamicTabs({ tabs, activeTabId, onTabClick, onTabClose, onAIRev
           animate={{ opacity: 1, height: 'auto' }}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 16px', background: `${activeTab.color}04`, borderBottom: `1px solid ${activeTab.color}15`,
+            padding: '10px 20px', background: `${activeTab.color}05`, borderBottom: `1px solid ${activeTab.color}15`,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               onClick={() => onAIReview(activeTab.id)}
               disabled={activeTab.reviewing}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                fontSize: 12, fontWeight: 700, padding: '6px 14px', borderRadius: 8,
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 13, fontWeight: 700, padding: '8px 18px', borderRadius: 10,
                 background: activeTab.reviewing ? '#f1f5f9' : `${activeTab.color}`,
                 color: activeTab.reviewing ? '#94a3b8' : '#fff',
                 border: 'none', cursor: activeTab.reviewing ? 'not-allowed' : 'pointer',
-                boxShadow: activeTab.reviewing ? 'none' : `0 2px 8px ${activeTab.color}30`,
+                boxShadow: activeTab.reviewing ? 'none' : `0 3px 10px ${activeTab.color}35`,
               }}
             >
               {activeTab.reviewing ? (
-                <><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}><Bot className="h-3.5 w-3.5" /></motion.div> Reviewing...</>
+                <><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}><Bot className="h-4 w-4" /></motion.div> Reviewing...</>
               ) : (
-                <><Bot className="h-3.5 w-3.5" /> AI Review All</>
+                <><Bot className="h-4 w-4" /> AI Review All</>
               )}
             </button>
 
@@ -124,13 +124,13 @@ export function DynamicTabs({ tabs, activeTabId, onTabClick, onTabClose, onAIRev
               <button
                 onClick={() => onApproveAllSafe(activeTab.id)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 4,
-                  fontSize: 12, fontWeight: 700, padding: '6px 14px', borderRadius: 8,
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  fontSize: 13, fontWeight: 700, padding: '8px 18px', borderRadius: 10,
                   background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(22,163,106,0.25)',
+                  boxShadow: '0 3px 10px rgba(22,163,106,0.3)',
                 }}
               >
-                <CheckCheck className="h-3.5 w-3.5" />
+                <CheckCheck className="h-4 w-4" />
                 Approve {safeCount} Safe
               </button>
             )}
@@ -138,7 +138,7 @@ export function DynamicTabs({ tabs, activeTabId, onTabClick, onTabClose, onAIRev
 
           {/* Verdict summary */}
           {hasVerdicts && (
-            <div style={{ display: 'flex', gap: 8, fontSize: 12, fontWeight: 700 }}>
+            <div style={{ display: 'flex', gap: 12, fontSize: 13, fontWeight: 700 }}>
               {safeCount > 0 && <span style={{ color: '#16a34a' }}>✅ {safeCount} safe</span>}
               {reviewCount > 0 && <span style={{ color: '#f59e0b' }}>⚠️ {reviewCount} review</span>}
               {flagCount > 0 && <span style={{ color: '#ef4444' }}>❌ {flagCount} flagged</span>}

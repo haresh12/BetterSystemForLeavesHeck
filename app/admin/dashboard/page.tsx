@@ -330,50 +330,50 @@ export default function AdminDashboardPage() {
       {/* ═══ LEFT: DASHBOARD ═══ */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Header */}
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', background: '#fff', borderBottom: '1px solid #e8e8f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ height: 34, width: 34, borderRadius: 10, background: 'linear-gradient(135deg, #ef4444, #f97316)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 12px rgba(239,68,68,0.3)' }}>
-              <Shield className="h-4 w-4" style={{ color: '#fff' }} />
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', background: '#fff', borderBottom: '1px solid #e8e8f0', boxShadow: '0 1px 0 #f0f0f8' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ height: 44, width: 44, borderRadius: 13, background: 'linear-gradient(135deg, #ef4444, #f97316)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(239,68,68,0.35)' }}>
+              <Shield className="h-5 w-5" style={{ color: '#fff' }} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 15, fontWeight: 900, color: '#1a1a2e' }}>ConvoWork</span>
-                <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: '#fef2f2', color: '#ef4444' }}>ADMIN</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 17, fontWeight: 900, color: '#1a1a2e' }}>ConvoWork</span>
+                <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: '#fef2f2', color: '#ef4444', letterSpacing: '0.04em' }}>ADMIN</span>
               </div>
-              <p style={{ fontSize: 11, color: '#94a3b8' }}>{firstName} · {openCases.length} open cases</p>
+              <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>{firstName} · {openCases.length} open cases</p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <button onClick={() => { setEmpPanelOpen(true); loadEmployees() }} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe', cursor: 'pointer' }}>
-              <Users className="h-3 w-3" /> Team
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => { setEmpPanelOpen(true); loadEmployees() }} style={{ height: 36, padding: '0 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe', cursor: 'pointer' }}>
+              <Users className="h-3.5 w-3.5" /> Team
             </button>
             {hasMockCases ? (
-              <button onClick={handleResetDemo} disabled={resetting} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
-                <RefreshCw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} /> {resetting ? 'Resetting...' : 'Reset Demo'}
+              <button onClick={handleResetDemo} disabled={resetting} style={{ height: 36, padding: '0 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
+                <RefreshCw className={`h-3.5 w-3.5 ${resetting ? 'animate-spin' : ''}`} /> {resetting ? 'Resetting...' : 'Reset Demo'}
               </button>
             ) : (
-              <button onClick={handleSeedDemo} disabled={resetting} style={{ height: 30, padding: '0 10px', borderRadius: 7, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', border: '1px solid #86efac', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
-                <Plus className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} /> {resetting ? 'Loading...' : 'Load Demo Cases'}
+              <button onClick={handleSeedDemo} disabled={resetting} style={{ height: 36, padding: '0 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, background: '#f0fdf4', color: '#16a34a', border: '1px solid #86efac', cursor: 'pointer', opacity: resetting ? 0.5 : 1 }}>
+                <Plus className={`h-3.5 w-3.5 ${resetting ? 'animate-spin' : ''}`} /> {resetting ? 'Loading...' : 'Load Demo Cases'}
               </button>
             )}
             <NotificationBell notifications={notifList} unreadCount={unreadCount} onMarkAllRead={markAllRead} />
-            <button onClick={handleSignOut} style={{ height: 30, width: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>
-              <LogOut className="h-3.5 w-3.5" />
+            <button onClick={handleSignOut} style={{ height: 36, width: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: '#f8f9fc', border: '1px solid #e8e8f0', cursor: 'pointer' }}>
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </header>
 
         {/* Dashboard content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
           <KPICards data={kpi} activeFilter={null} onFilter={() => {}} />
 
           {/* Quick filters — each sends chat message */}
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 16 }}>
             <QuickFilters onFilter={sendChatMessage} />
           </div>
 
           {/* Table container with dynamic tabs */}
-          <div style={{ marginTop: 12, background: '#fff', borderRadius: 14, border: '1px solid #e8e8f0', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.03)' }}>
+          <div style={{ marginTop: 16, background: '#fff', borderRadius: 18, border: '1px solid #e8e8f0', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
             <DynamicTabs
               tabs={tabs}
               activeTabId={activeTabId}
@@ -384,7 +384,7 @@ export default function AdminDashboardPage() {
               aiVerdicts={aiVerdicts}
             />
             {casesLoading ? (
-              <div style={{ padding: 48, textAlign: 'center' }}><p style={{ fontSize: 14, color: '#94a3b8' }}>Loading...</p></div>
+              <div style={{ padding: 60, textAlign: 'center' }}><p style={{ fontSize: 15, color: '#94a3b8' }}>Loading...</p></div>
             ) : (
               <CaseTableAdmin
                 cases={displayCases}
@@ -395,8 +395,8 @@ export default function AdminDashboardPage() {
                 reviewingCaseIds={reviewingCaseIds}
               />
             )}
-            <div style={{ padding: '8px 16px', borderTop: '1px solid #f0f0f5', background: '#fafafc' }}>
-              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+            <div style={{ padding: '10px 20px', borderTop: '1px solid #f0f0f5', background: '#fafafc' }}>
+              <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>
                 {displayCases.length} cases · Click type/dept to filter · Click row for AI analysis
               </span>
             </div>
@@ -405,26 +405,29 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ═══ RIGHT: AI CHAT ═══ */}
-      <div style={{ width: 440, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fafaff', borderLeft: '1px solid #e8e8f0' }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid #e8e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(99,102,241,0.04), rgba(139,92,246,0.02))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{ height: 24, width: 24, borderRadius: 6, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles className="h-3 w-3" style={{ color: '#fff' }} />
+      <div style={{ width: 480, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fafaff', borderLeft: '1px solid #e8e8f0' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #e8e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.02))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ height: 32, width: 32, borderRadius: 9, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 10px rgba(99,102,241,0.3)' }}>
+              <Sparkles className="h-4 w-4" style={{ color: '#fff' }} />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>AI Command</span>
-            {isLoading && <motion.div style={{ height: 5, width: 5, borderRadius: '50%', background: '#ef4444' }} animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 1 }} />}
+            <div>
+              <span style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e', display: 'block' }}>AI Command</span>
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>Filter · Review · Approve</span>
+            </div>
+            {isLoading && <motion.div style={{ height: 6, width: 6, borderRadius: '50%', background: '#ef4444' }} animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 1 }} />}
           </div>
-          <button onClick={handleNewChat} style={{ height: 24, width: 24, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: '#f1f5f9', border: 'none', cursor: 'pointer' }}>
-            <Plus className="h-3 w-3" />
+          <button onClick={handleNewChat} style={{ height: 30, width: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', background: '#f1f5f9', border: '1px solid #e8e8f0', cursor: 'pointer' }}>
+            <Plus className="h-3.5 w-3.5" />
           </button>
         </div>
 
         <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto' }}>
           {visibleMessages.length === 0 ? (
-            <div style={{ padding: '28px 14px', textAlign: 'center' }}>
-              <Sparkles className="h-6 w-6 mx-auto" style={{ color: '#c7d2fe', marginBottom: 6 }} />
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>AI Ready</p>
-              <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Type a filter, review, or approve command</p>
+            <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+              <Sparkles className="h-8 w-8 mx-auto" style={{ color: '#c7d2fe', marginBottom: 10 }} />
+              <p style={{ fontSize: 15, fontWeight: 700, color: '#475569' }}>AI Ready</p>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>Type a filter, review, or approve command</p>
             </div>
           ) : (
             <div style={{ padding: '4px 0' }}>
@@ -442,13 +445,13 @@ export default function AdminDashboardPage() {
                   <TypingRow key="typing" isAdmin />
                 )}
               </AnimatePresence>
-              <div style={{ height: 6 }} />
+              <div style={{ height: 8 }} />
             </div>
           )}
         </div>
 
         {/* Quick action chips */}
-        <div style={{ padding: '5px 10px', display: 'flex', gap: 4, flexWrap: 'wrap', borderTop: '1px solid #f0f0f5' }}>
+        <div style={{ padding: '8px 14px', display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #f0f0f5', background: '#fafafc' }}>
           {[
             { label: 'Review PTO', msg: 'Show all PTO cases' },
             { label: 'Personal', msg: 'Show all Personal leave cases' },
@@ -458,13 +461,17 @@ export default function AdminDashboardPage() {
             { label: 'Coverage', msg: 'Show team coverage for next week' },
             { label: 'Triage', msg: 'What needs my attention today?' },
           ].map(a => (
-            <button key={a.label} onClick={() => sendChatMessage(a.msg)} style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 99, border: '1px solid #e8e8f0', background: '#fff', color: '#6366f1', cursor: 'pointer' }}>
+            <button key={a.label} onClick={() => sendChatMessage(a.msg)}
+              style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 99, border: '1px solid #e0e0f0', background: '#fff', color: '#6366f1', cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#eef2ff'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#c7d2fe' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#fff'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#e0e0f0' }}
+            >
               {a.label}
             </button>
           ))}
         </div>
 
-        <div style={{ padding: '6px 10px 10px' }}>
+        <div style={{ padding: '8px 14px 14px' }}>
           <ChatInput input={input} isLoading={isLoading} onInputChange={(e) => setInput(e.target.value)} onSubmit={handleSend} placeholder="Filter, review, approve..." pendingFile={pendingFile} onFileAttach={setPendingFile} hideUpload />
         </div>
       </div>
